@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -68,6 +69,7 @@ import com.example.data.model.SharedSchedule
 import com.example.domain.LunarCalendarEngine
 import com.example.notifications.SmartReminderHelper
 import com.example.ui.UiState
+import com.example.util.SignatureSyncHelper
 import com.example.widget.LunarCalendarAppWidgetProvider
 
 @Composable
@@ -366,16 +368,19 @@ fun SettingsAndCloudScreen(
 ) {
     val context = LocalContext.current
     var showGithubWorkflowCode by remember { mutableStateOf(false) }
+    val signatureInfo = remember { SignatureSyncHelper.getRuntimeSignatureInfo(context) }
 
     val githubWorkflowSnippet = remember {
         """
-name: Build & Publish Android APK to GitHub Releases
+name: Build & Release Signed APK
 on:
   push:
-    tags: ['v*.*.*']
+    branches: [ main, master, '**' ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 permissions:
   contents: write
+  actions: read
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
@@ -384,14 +389,40 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
-          cache: 'gradle'
-      - name: Build Signed APK
-        run: ./gradlew assembleDebug
-      - name: Upload APK to GitHub Release
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 36
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "build-tools;36.0.0" "platforms;android-36" || true
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Đồng bộ Chữ ký số (Debug & Release Keystore)
+        run: |
+          base64 -d debug.keystore.base64 > debug.keystore
+          rm -f my-upload-key.jks
+          keytool -importkeystore -srckeystore debug.keystore -destkeystore my-upload-key.jks \
+            -srcstoretype PKCS12 -deststoretype PKCS12 -srcstorepass android -deststorepass android \
+            -srckeypass android -destkeypass android -srcalias androiddebugkey -destalias upload -noprompt
+      - name: Build Signed Release & Debug APK
+        env:
+          KEYSTORE_PATH: ${'$'}{{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: android
+          KEY_PASSWORD: android
+        run: |
+          sed -i 's/compileSdk { version = release(36) { minorApiLevel = 1 } }/compileSdk = 36/g' app/build.gradle.kts || true
+          gradle assembleRelease assembleDebug --no-daemon
+      - name: Publish Signed APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/debug/*.apk
+          tag_name: v1.0.${'$'}{{ github.run_number }}
+          name: "Lịch Vạn Niên v1.0.${'$'}{{ github.run_number }} (Signed APK)"
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
+        env:
+          GITHUB_TOKEN: ${'$'}{{ secrets.GITHUB_TOKEN }}
         """.trimIndent()
     }
 
@@ -408,7 +439,7 @@ jobs:
                 style = MaterialTheme.typography.headlineMedium
             )
             Text(
-                text = "Tùy chỉnh chế độ tối tiết kiệm pin, màu sắc truyền thống, Widget màn hình chính và xuất APK tự động lên GitHub Release.",
+                text = "Tùy chỉnh chế độ tối tiết kiệm pin, màu sắc truyền thống, đồng bộ chữ ký số APK và xuất bản lên GitHub Release.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -486,7 +517,103 @@ jobs:
             }
         }
 
-        // 2. Dark Mode & Theme Personalization Card
+        // 2. APK Signing Certificate Synchronization Card (Đồng bộ chữ ký số SHA-1 / SHA-256)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.VerifiedUser,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Đồng Bộ Chữ Ký Số APK (SHA-1 & SHA-256)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = if (signatureInfo.isSyncedWithFirebase) {
+                            "✓ Đã đồng bộ 100% giữa Keystore ứng dụng, Firebase OAuth (google-services.json) và GitHub Actions Release."
+                        } else {
+                            "Chứng chỉ APK đang chạy được đối chiếu trực tiếp với cấu hình Firebase."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "Package: ${signatureInfo.packageName}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "SHA-1: ${signatureInfo.sha1Colon}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "SHA-256: ${signatureInfo.sha256Colon}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                val certPayload = "Package: ${signatureInfo.packageName}\nSHA-1: ${signatureInfo.sha1Colon}\nSHA-256: ${signatureInfo.sha256Colon}"
+                                clipboard?.setPrimaryClip(
+                                    ClipData.newPlainText("apk-signing-fingerprints", certPayload)
+                                )
+                                onShowMessage("Đã sao chép chữ ký số SHA-1 & SHA-256 vào bộ nhớ tạm!")
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("copy_signature_sha_btn"),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Sao chép SHA-1/256")
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Dark Mode & Theme Personalization Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -623,7 +750,7 @@ jobs:
             }
         }
 
-        // 3. Home Screen Widget Card
+        // 4. Home Screen Widget Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -680,7 +807,7 @@ jobs:
             }
         }
 
-        // 4. Automated APK Build & GitHub Release Card
+        // 5. Automated APK Build & GitHub Release Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -698,14 +825,14 @@ jobs:
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Tự Động Xuất APK & Đăng Lên GitHub Release",
+                            text = "Tự Động Xuất APK (Đồng Bộ Chữ Ký) Lên GitHub Release",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Dự án đã được tích hợp sẵn tệp cấu hình `.github/workflows/release-apk.yml`. Khi bạn đẩy mã nguồn lên GitHub và gắn thẻ phiên bản (ví dụ `v1.0.0`), GitHub Actions sẽ tự động biên dịch file APK đã ký và đăng trực tiếp lên mục Releases.",
+                        text = "Workflow `.github/workflows/build-and-release-apk.yml` tự động chạy ngay khi bạn Push lên nhánh `main`/`master` (hoặc bấm Run workflow), giải mã `debug.keystore.base64` để đồng bộ chữ ký SHA-1/SHA-256 cho cả bản Release & Debug APK rồi đăng lên GitHub Releases.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -720,9 +847,9 @@ jobs:
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 clipboard?.setPrimaryClip(
-                                    ClipData.newPlainText("github-release-apk.yml", githubWorkflowSnippet)
+                                    ClipData.newPlainText("build-and-release-apk.yml", githubWorkflowSnippet)
                                 )
-                                onShowMessage("Đã sao chép cấu hình GitHub Actions (.github/workflows/release-apk.yml)!")
+                                onShowMessage("Đã sao chép cấu hình .github/workflows/build-and-release-apk.yml!")
                             },
                             modifier = Modifier
                                 .weight(1f)
