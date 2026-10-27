@@ -1,0 +1,231 @@
+{
+  "entities": {
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "Personal solar and lunar calendar event or smart reminder owned by a user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the authenticated owner (must match request.auth.uid)."
+        },
+        "title": {
+          "type": "string",
+          "description": "Event title (1 to 120 characters)."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional event notes or description (0 to 500 characters)."
+        },
+        "solarDay": {
+          "type": "integer",
+          "description": "Solar day of the month (1 to 31)."
+        },
+        "solarMonth": {
+          "type": "integer",
+          "description": "Solar month of the year (1 to 12)."
+        },
+        "solarYear": {
+          "type": "integer",
+          "description": "Solar year (1900 to 2100)."
+        },
+        "lunarDay": {
+          "type": "integer",
+          "description": "Lunar day of the month (1 to 30)."
+        },
+        "lunarMonth": {
+          "type": "integer",
+          "description": "Lunar month of the year (1 to 12)."
+        },
+        "lunarYear": {
+          "type": "integer",
+          "description": "Lunar year (1900 to 2100)."
+        },
+        "isLunarLeapMonth": {
+          "type": "boolean",
+          "description": "Whether the lunar month is a leap month."
+        },
+        "isLunarRecurring": {
+          "type": "boolean",
+          "description": "Whether the event repeats annually according to the Lunar calendar (e.g., Giỗ, Tết, Rằm)."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["holiday", "ancestral", "anniversary", "work", "personal"],
+          "description": "Category of the event."
+        },
+        "reminderMinutesBefore": {
+          "type": "integer",
+          "description": "Smart reminder offset in minutes before event (e.g., 0, 30, 60, 1440)."
+        },
+        "syncedToGoogle": {
+          "type": "boolean",
+          "description": "Whether the event has been synced with Google Calendar."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "title",
+        "notes",
+        "solarDay",
+        "solarMonth",
+        "solarYear",
+        "lunarDay",
+        "lunarMonth",
+        "lunarYear",
+        "isLunarLeapMonth",
+        "isLunarRecurring",
+        "category",
+        "reminderMinutesBefore",
+        "syncedToGoogle",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPreference": {
+      "title": "UserPreference",
+      "description": "Cloud-backed user personalization settings and smart notification preferences.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the authenticated user."
+        },
+        "themeMode": {
+          "type": "string",
+          "enum": ["system", "light", "dark"],
+          "description": "Selected theme mode for battery saving and comfort."
+        },
+        "accentPalette": {
+          "type": "string",
+          "enum": ["crimson_gold", "jade_bamboo", "indigo_moon", "royal_lotus"],
+          "description": "Selected traditional Vietnamese color palette."
+        },
+        "notifyHolidays": {
+          "type": "boolean",
+          "description": "Whether to notify on Vietnamese lunar and solar holidays."
+        },
+        "notifyMung1Ram": {
+          "type": "boolean",
+          "description": "Smart reminder on Lunar 1st (Mùng 1) and 15th (Rằm) each month."
+        },
+        "defaultReminderHour": {
+          "type": "integer",
+          "description": "Preferred hour of the day for smart reminders (0 to 23)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "themeMode",
+        "accentPalette",
+        "notifyHolidays",
+        "notifyMung1Ram",
+        "defaultReminderHour",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SharedSchedule": {
+      "title": "SharedSchedule",
+      "description": "A schedule item shared securely by an owner with a friend's email account.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the user who shared the schedule."
+        },
+        "ownerName": {
+          "type": "string",
+          "description": "Display name of the sender (1 to 100 chars)."
+        },
+        "recipientEmail": {
+          "type": "string",
+          "description": "Target recipient's email address (3 to 150 chars)."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the shared event (1 to 120 chars)."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Event details (0 to 500 chars)."
+        },
+        "solarDateIso": {
+          "type": "string",
+          "description": "Solar date formatted YYYY-MM-DD (8 to 20 chars)."
+        },
+        "lunarDateDisplay": {
+          "type": "string",
+          "description": "Formatted Lunar date string (1 to 60 chars)."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["holiday", "ancestral", "anniversary", "work", "personal"],
+          "description": "Category of the shared event."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "ownerId",
+        "ownerName",
+        "recipientEmail",
+        "title",
+        "notes",
+        "solarDateIso",
+        "lunarDateDisplay",
+        "category",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/events/{eventId}": {
+      "schema": {
+        "$ref": "#/entities/CalendarEvent"
+      },
+      "description": "User's private cloud-backed lunar and solar events."
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/UserPreference"
+      },
+      "description": "User's personalized UI theme and smart notification preferences."
+    },
+    "/shared_schedules/{shareId}": {
+      "schema": {
+        "$ref": "#/entities/SharedSchedule"
+      },
+      "description": "Schedules shared between users via linked email accounts."
+    }
+  }
+}

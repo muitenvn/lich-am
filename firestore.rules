@@ -1,0 +1,195 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 4.1: Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidCategory(cat) {
+      return cat is string && (
+        cat == 'holiday' ||
+        cat == 'ancestral' ||
+        cat == 'anniversary' ||
+        cat == 'work' ||
+        cat == 'personal'
+      );
+    }
+
+    // 1. Validation Helper: CalendarEvent
+    function isValidCalendarEvent(data) {
+      return data.userId is string && data.userId == request.auth.uid && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.notes is string && data.notes.size() <= 500 &&
+             data.solarDay is int && data.solarDay >= 1 && data.solarDay <= 31 &&
+             data.solarMonth is int && data.solarMonth >= 1 && data.solarMonth <= 12 &&
+             data.solarYear is int && data.solarYear >= 1900 && data.solarYear <= 2100 &&
+             data.lunarDay is int && data.lunarDay >= 1 && data.lunarDay <= 30 &&
+             data.lunarMonth is int && data.lunarMonth >= 1 && data.lunarMonth <= 12 &&
+             data.lunarYear is int && data.lunarYear >= 1900 && data.lunarYear <= 2100 &&
+             data.isLunarLeapMonth is bool &&
+             data.isLunarRecurring is bool &&
+             isValidCategory(data.category) &&
+             data.reminderMinutesBefore is int && data.reminderMinutesBefore >= 0 && data.reminderMinutesBefore <= 43200 &&
+             data.syncedToGoogle is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 2. Validation Helper: UserPreference
+    function isValidUserPreference(data) {
+      return data.userId is string && data.userId == request.auth.uid && data.userId.size() <= 128 &&
+             data.themeMode is string && (data.themeMode == 'system' || data.themeMode == 'light' || data.themeMode == 'dark') &&
+             data.accentPalette is string && (
+               data.accentPalette == 'crimson_gold' ||
+               data.accentPalette == 'jade_bamboo' ||
+               data.accentPalette == 'indigo_moon' ||
+               data.accentPalette == 'royal_lotus'
+             ) &&
+             data.notifyHolidays is bool &&
+             data.notifyMung1Ram is bool &&
+             data.defaultReminderHour is int && data.defaultReminderHour >= 0 && data.defaultReminderHour <= 23 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 3. Validation Helper: SharedSchedule
+    function isValidSharedSchedule(data) {
+      return data.ownerId is string && data.ownerId == request.auth.uid && data.ownerId.size() <= 128 &&
+             data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100 &&
+             data.recipientEmail is string && data.recipientEmail.size() >= 3 && data.recipientEmail.size() <= 150 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.notes is string && data.notes.size() <= 500 &&
+             data.solarDateIso is string && data.solarDateIso.size() >= 8 && data.solarDateIso.size() <= 20 &&
+             data.lunarDateDisplay is string && data.lunarDateDisplay.size() >= 1 && data.lunarDateDisplay.size() <= 60 &&
+             isValidCategory(data.category) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Collection 1: /users/{userId}/events/{eventId}
+    match /users/{userId}/events/{eventId} {
+      allow get: if isSignedIn() && isValidId(userId) && isValidId(eventId) && request.auth.uid == userId;
+      allow list: if isSignedIn() && request.auth.uid == userId && existing().userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(eventId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll([
+                         'userId', 'title', 'notes', 'solarDay', 'solarMonth', 'solarYear',
+                         'lunarDay', 'lunarMonth', 'lunarYear', 'isLunarLeapMonth', 'isLunarRecurring',
+                         'category', 'reminderMinutesBefore', 'syncedToGoogle', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'title', 'notes', 'solarDay', 'solarMonth', 'solarYear',
+                         'lunarDay', 'lunarMonth', 'lunarYear', 'isLunarLeapMonth', 'isLunarRecurring',
+                         'category', 'reminderMinutesBefore', 'syncedToGoogle', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidCalendarEvent(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(eventId) &&
+                       request.auth.uid == userId &&
+                       isValidCalendarEvent(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'title', 'notes', 'solarDay', 'solarMonth', 'solarYear',
+                         'lunarDay', 'lunarMonth', 'lunarYear', 'isLunarLeapMonth', 'isLunarRecurring',
+                         'category', 'reminderMinutesBefore', 'syncedToGoogle', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && isValidId(eventId) && request.auth.uid == userId;
+    }
+
+    // Collection 2: /users/{userId}/settings/{settingId}
+    match /users/{userId}/settings/{settingId} {
+      allow get: if isSignedIn() && isValidId(userId) && isValidId(settingId) && request.auth.uid == userId;
+      allow list: if isSignedIn() && request.auth.uid == userId && existing().userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(settingId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll([
+                         'userId', 'themeMode', 'accentPalette', 'notifyHolidays',
+                         'notifyMung1Ram', 'defaultReminderHour', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'themeMode', 'accentPalette', 'notifyHolidays',
+                         'notifyMung1Ram', 'defaultReminderHour', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidUserPreference(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(settingId) &&
+                       request.auth.uid == userId &&
+                       isValidUserPreference(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'themeMode', 'accentPalette', 'notifyHolidays',
+                         'notifyMung1Ram', 'defaultReminderHour', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && isValidId(settingId) && request.auth.uid == userId;
+    }
+
+    // Collection 3: /shared_schedules/{shareId}
+    match /shared_schedules/{shareId} {
+      allow get: if isSignedIn() &&
+                    isValidId(shareId) &&
+                    (existing().ownerId == request.auth.uid ||
+                     (request.auth.token.email_verified == true && existing().recipientEmail == request.auth.token.email));
+
+      allow list: if isSignedIn() &&
+                     (existing().ownerId == request.auth.uid ||
+                      (request.auth.token.email_verified == true && existing().recipientEmail == request.auth.token.email));
+
+      allow create: if isSignedIn() &&
+                       isValidId(shareId) &&
+                       incoming().keys().hasAll([
+                         'ownerId', 'ownerName', 'recipientEmail', 'title', 'notes',
+                         'solarDateIso', 'lunarDateDisplay', 'category', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'ownerId', 'ownerName', 'recipientEmail', 'title', 'notes',
+                         'solarDateIso', 'lunarDateDisplay', 'category', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidSharedSchedule(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(shareId) &&
+                       existing().ownerId == request.auth.uid &&
+                       isValidSharedSchedule(incoming()) &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'ownerName', 'recipientEmail', 'title', 'notes',
+                         'solarDateIso', 'lunarDateDisplay', 'category', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(shareId) && existing().ownerId == request.auth.uid;
+    }
+  }
+}

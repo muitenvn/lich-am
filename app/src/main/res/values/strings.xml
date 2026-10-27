@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Lịch Vạn Niên</string>
+    <string name="widget_description">Xem nhanh Lịch Âm - Dương, Can Chi, Tiết Khí và Ngày Lễ ngoài màn hình chính</string>
+    <string name="tab_calendar">Lịch Tháng</string>
+    <string name="tab_converter">Đổi Ngày</string>
+    <string name="tab_events">Sự Kiện</string>
+    <string name="tab_share">Chia Sẻ</string>
+    <string name="tab_settings">Cài Đặt</string>
+    <string name="sign_in_google">Đăng nhập bằng Google</string>
+    <string name="sign_out">Đăng xuất</string>
+</resources>

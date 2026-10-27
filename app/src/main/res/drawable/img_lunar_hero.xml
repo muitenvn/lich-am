@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="360dp"
+    android:height="160dp"
+    android:viewportWidth="360"
+    android:viewportHeight="160">
+    <!-- Deep nocturnal indigo sky gradient -->
+    <path android:pathData="M0,0h360v160h-360z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="360"
+                android:endY="160"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#1C1427" />
+                <item android:offset="0.5" android:color="#4A1525" />
+                <item android:offset="1.0" android:color="#7B1E26" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Soft golden glow circles -->
+    <path
+        android:fillColor="#22FFD54F"
+        android:pathData="M295,48m-52,0a52,52 0,1 1,104 0a52,52 0,1 1,-104 0" />
+    <path
+        android:fillColor="#44FFD54F"
+        android:pathData="M295,48m-36,0a36,36 0,1 1,72 0a36,36 0,1 1,-72 0" />
+    <!-- Golden Crescent Moon -->
+    <path
+        android:fillColor="#FFD966"
+        android:pathData="M302,22C287.6,22 276,33.6 276,48C276,62.4 287.6,74 302,74C307.2,74 312,72.4 316,69.8C306.2,67.2 299,58.4 299,48C299,37.6 306.2,28.8 316,26.2C312,23.6 307.2,22 302,22Z" />
+    <!-- Distant traditional mountain silhouettes -->
+    <path
+        android:fillColor="#330D111A"
+        android:pathData="M0,160 L0,115 Q60,85 130,120 T260,105 T360,120 L360,160 Z" />
+    <path
+        android:fillColor="#660D111A"
+        android:pathData="M0,160 L0,132 Q90,108 180,135 T360,128 L360,160 Z" />
+    <!-- Subtle decorative stars -->
+    <path
+        android:fillColor="#99FFF8E1"
+        android:pathData="M60,34m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <path
+        android:fillColor="#77FFF8E1"
+        android:pathData="M140,24m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <path
+        android:fillColor="#AAFFD54F"
+        android:pathData="M210,44m-2.5,0a2.5,2.5 0,1 1,5 0a2.5,2.5 0,1 1,-5 0" />
+</vector>

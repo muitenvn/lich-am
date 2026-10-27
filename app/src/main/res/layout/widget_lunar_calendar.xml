@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_lunar_widget"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="16dp">
+
+    <!-- Left Column: Solar Date -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_solar_month_year"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="THÁNG 10, 2026"
+            android:textColor="#CCFFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_solar_day"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="27"
+            android:textColor="#FFFFFF"
+            android:textSize="38sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_day_of_week"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Thứ Ba • Hôm nay"
+            android:textColor="#FFD966"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Right Column: Lunar Date & Can Chi -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.15"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_lunar_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ÂM LỊCH VIỆT NAM"
+            android:textColor="#FFD966"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_lunar_day_month"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="18 / 09 Âm"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_can_chi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Ngày Giáp Tý • Năm Bính Ngọ"
+            android:textColor="#E0E0E0"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_holiday_or_tiet_khi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Tiết Sương Giáng • Hoàng Đạo"
+            android:textColor="#FFAB91"
+            android:textSize="11sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>

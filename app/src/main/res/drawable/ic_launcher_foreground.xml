@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Golden Ring -->
+    <path
+        android:fillColor="#F4C430"
+        android:pathData="M54,24A30,30 0,1 0,84 54A30,30 0,0 0,54 24ZM54,78A24,24 0,1 1,78 54A24,24 0,0 1,54 78Z" />
+    <!-- Crescent Moon & Sun Silhouette inside safe zone -->
+    <path
+        android:fillColor="#FFD966"
+        android:pathData="M60,33C48.4,33 39,42.4 39,54C39,65.6 48.4,75 60,75C63.8,75 67.3,73.9 70.3,72.1C62.5,70.2 56.8,62.8 56.8,54C56.8,45.2 62.5,37.8 70.3,35.9C67.3,34.1 63.8,33 60,33Z" />
+    <path
+        android:fillColor="#FF6B5B"
+        android:pathData="M66,54m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0" />
+</vector>

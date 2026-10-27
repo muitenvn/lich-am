@@ -1,0 +1,6 @@
+{
+  "name": "Lịch Vạn Niên",
+  "description": "Ứng dụng Lịch Âm Dương tối giản với nhắc nhở thông minh, đồng bộ Google Calendar, sao lưu đám mây, chia sẻ sự kiện và tiện ích Widget.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
