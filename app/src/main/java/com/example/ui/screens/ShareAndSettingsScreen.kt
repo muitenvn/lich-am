@@ -75,6 +75,8 @@ import com.example.widget.LunarCalendarAppWidgetProvider
 @Composable
 fun ShareScheduleScreen(
     currentUserEmail: String,
+    isSignedIn: Boolean = false,
+    onRequestSignIn: () -> Unit = {},
     selectedDay: Int,
     selectedMonth: Int,
     selectedYear: Int,
@@ -109,7 +111,7 @@ fun ShareScheduleScreen(
                 style = MaterialTheme.typography.headlineMedium
             )
             Text(
-                text = "Gửi lịch trình qua liên kết tài khoản Email xác thực (Zero-Trust Cloud) hoặc chia sẻ qua Zalo, Messenger, Facebook, Gmail.",
+                text = "Chia sẻ nhanh qua Zalo, Messenger, Facebook, Tin nhắn (không cần đăng nhập) hoặc gửi qua Email Đám Mây khi đã đăng nhập.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -134,7 +136,7 @@ fun ShareScheduleScreen(
                     OutlinedTextField(
                         value = recipientEmail,
                         onValueChange = { recipientEmail = it },
-                        label = { Text("Email tài khoản Google người nhận") },
+                        label = { Text("Email tài khoản Google người nhận (Tùy chọn)") },
                         placeholder = { Text("banbe@gmail.com") },
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
                         singleLine = true,
@@ -172,36 +174,6 @@ fun ShareScheduleScreen(
                     ) {
                         Button(
                             onClick = {
-                                if (recipientEmail.contains("@") && shareTitle.isNotBlank()) {
-                                    onShareViaEmailCloud(
-                                        recipientEmail,
-                                        shareTitle,
-                                        shareNotes,
-                                        selectedDay,
-                                        selectedMonth,
-                                        selectedYear,
-                                        "personal"
-                                    )
-                                    recipientEmail = ""
-                                }
-                            },
-                            enabled = recipientEmail.contains("@") && shareTitle.isNotBlank(),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("send_cloud_email_share_btn"),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Send,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Gửi qua Email Cloud")
-                        }
-
-                        OutlinedButton(
-                            onClick = {
                                 SmartReminderHelper.shareScheduleViaPlatform(
                                     context = context,
                                     title = shareTitle,
@@ -224,6 +196,38 @@ fun ShareScheduleScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Mạng xã hội / App")
                         }
+
+                        OutlinedButton(
+                            onClick = {
+                                if (!isSignedIn) {
+                                    onRequestSignIn()
+                                } else if (recipientEmail.contains("@") && shareTitle.isNotBlank()) {
+                                    onShareViaEmailCloud(
+                                        recipientEmail,
+                                        shareTitle,
+                                        shareNotes,
+                                        selectedDay,
+                                        selectedMonth,
+                                        selectedYear,
+                                        "personal"
+                                    )
+                                    recipientEmail = ""
+                                }
+                            },
+                            enabled = !isSignedIn || (recipientEmail.contains("@") && shareTitle.isNotBlank()),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("send_cloud_email_share_btn"),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (isSignedIn) "Gửi Email Cloud" else "Email Cloud (Cần ĐN)")
+                        }
                     }
                 }
             }
@@ -232,13 +236,47 @@ fun ShareScheduleScreen(
         // Inbox: Shared with me
         item {
             Text(
-                text = "Lịch bạn bè gửi tới ($currentUserEmail) (${sharedWithMe.size})",
+                text = if (isSignedIn) {
+                    "Lịch bạn bè gửi tới ($currentUserEmail) (${sharedWithMe.size})"
+                } else {
+                    "Hộp thư Lịch Trình Đám Mây (Yêu cầu đăng nhập)"
+                },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        if (sharedWithMe.isEmpty()) {
+        if (!isSignedIn) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Đăng nhập tài khoản Google để nhận và gửi lịch trình trực tiếp qua đám mây với bạn bè.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Button(
+                            onClick = onRequestSignIn,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Đăng nhập")
+                        }
+                    }
+                }
+            }
+        } else if (sharedWithMe.isEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -355,6 +393,8 @@ fun ShareScheduleScreen(
 fun SettingsAndCloudScreen(
     userEmail: String,
     userName: String,
+    isSignedIn: Boolean = false,
+    onRequestSignIn: () -> Unit = {},
     localSettings: LocalAppSettings,
     eventsCount: Int,
     onUpdateThemeMode: (String) -> Unit,
@@ -408,7 +448,7 @@ jobs:
           keytool -importkeystore -srckeystore debug.keystore -destkeystore my-upload-key.jks \
             -srcstorepass android -deststorepass android \
             -srckeypass android -destkeypass android -srcalias androiddebugkey -destalias upload -noprompt
-      - name: Build Signed Release & Debug APK
+      - name: Tự động tăng phiên bản (1.1 -> 1.2.${'$'}{{ github.run_number }}) & Build APK
         env:
           KEYSTORE_PATH: ${'$'}{{ github.workspace }}/my-upload-key.jks
         run: |
@@ -417,8 +457,8 @@ jobs:
       - name: Publish Signed APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${'$'}{{ github.run_number }}
-          name: "Lịch Vạn Niên v1.0.${'$'}{{ github.run_number }} (Signed APK)"
+          tag_name: v1.2.${'$'}{{ github.run_number }}
+          name: "Lịch Vạn Niên v1.2.${'$'}{{ github.run_number }} (Signed APK)"
           files: |
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/debug/*.apk
@@ -440,7 +480,7 @@ jobs:
                 style = MaterialTheme.typography.headlineMedium
             )
             Text(
-                text = "Tùy chỉnh chế độ tối tiết kiệm pin, màu sắc truyền thống, đồng bộ chữ ký số APK và xuất bản lên GitHub Release.",
+                text = "Phiên bản ứng dụng 1.1 • Tùy chỉnh chế độ tối tiết kiệm pin, màu sắc truyền thống, đồng bộ chữ ký số APK và xuất bản tự động lên GitHub Release.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -470,26 +510,67 @@ jobs:
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Tài khoản: ${userName.ifBlank { "Người dùng Google" }} ($userEmail)",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = "Trạng thái: Đang đồng bộ thời gian thực ($eventsCount sự kiện đã lưu an toàn)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                    if (isSignedIn) {
+                        Text(
+                            text = "Tài khoản: ${userName.ifBlank { "Người dùng Google" }} ($userEmail)",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "Trạng thái: Đang đồng bộ thời gian thực ($eventsCount sự kiện đã lưu an toàn)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = onBackupSettingsToCloud,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("cloud_backup_now_btn"),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudUpload,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Đồng bộ cấu hình")
+                            }
+                            OutlinedButton(
+                                onClick = onSignOut,
+                                modifier = Modifier.testTag("sign_out_btn"),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Logout,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Đăng xuất")
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Trạng thái: Đang dùng Chế độ Không Đăng Nhập ($eventsCount sự kiện lưu trên thiết bị).",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "Bạn không bắt buộc đăng nhập để xem lịch và tạo nhắc nhở trên máy. Đăng nhập Google bất cứ lúc nào để sao lưu đám mây.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
                         Button(
-                            onClick = onBackupSettingsToCloud,
+                            onClick = onRequestSignIn,
                             modifier = Modifier
-                                .weight(1f)
-                                .testTag("cloud_backup_now_btn"),
+                                .fillMaxWidth()
+                                .testTag("settings_sign_in_btn"),
                             shape = RoundedCornerShape(14.dp)
                         ) {
                             Icon(
@@ -497,21 +578,8 @@ jobs:
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Đồng bộ cấu hình")
-                        }
-                        OutlinedButton(
-                            onClick = onSignOut,
-                            modifier = Modifier.testTag("sign_out_btn"),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Logout,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Đăng xuất")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Đăng nhập bằng Google để Sao lưu Đám mây")
                         }
                     }
                 }

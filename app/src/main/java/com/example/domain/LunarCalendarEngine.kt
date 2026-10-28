@@ -30,7 +30,12 @@ data class DayDetailInfo(
     val zodiacHours: List<String>,
     val holidays: List<HolidayInfo>,
     val isGoodDay: Boolean,
-    val dayQualityLabel: String
+    val dayQualityLabel: String,
+    val nguHanhNgay: String = "",
+    val trucNgay: String = "",
+    val huongXuatHanh: String = "",
+    val viecNenLam: List<String> = emptyList(),
+    val viecKiengKy: List<String> = emptyList()
 )
 
 /**
@@ -52,6 +57,39 @@ object LunarCalendarEngine {
         "Hạ Chí", "Tiểu Thử", "Đại Thử", "Lập Thu", "Xử Thử", "Bạch Lộ",
         "Thu Phân", "Hàn Lộ", "Sương Giáng", "Lập Đông", "Tiểu Tuyết", "Đại Tuyết",
         "Đông Chí", "Tiểu Hàn", "Đại Hàn", "Lập Xuân", "Vũ Thủy", "Kinh Trập"
+    )
+
+    private val THAP_NHI_TRUC = listOf(
+        "Trực Kiến (Tốt xuất hành, khai trương)",
+        "Trực Trừ (Tốt cầu phúc, giải hạn, dọn dẹp)",
+        "Trực Mãn (Tốt mở kho, cầu tài lộc, cúng tế)",
+        "Trực Bình (Tốt giao dịch, sửa chữa, bàn việc)",
+        "Trực Định (Tốt ký kết, nhập học, cầu danh)",
+        "Trực Chấp (Tốt xây dựng, lập kế hoạch)",
+        "Trực Phá (Nên nghỉ ngơi, khám chữa bệnh)",
+        "Trực Nguy (Nên cẩn trọng khi đi xa)",
+        "Trực Thành (Đại cát: Khai trương, cưới hỏi, hợp tác)",
+        "Trực Thu (Tốt thu hoạch, tích lũy tài sản)",
+        "Trực Khai (Đại cát: Khởi công, nhậm chức, xuất hành)",
+        "Trực Bế (Tốt bồi đắp, tu dưỡng, tổng kết)"
+    )
+
+    private val NGU_HANH_NAP_AM = listOf(
+        "Hải Trung Kim (Vàng trong biển)", "Lư Trung Hỏa (Lửa trong lò)",
+        "Đại Lâm Mộc (Gỗ rừng già)", "Lộ Bàng Thổ (Đất ven đường)",
+        "Kiếm Phong Kim (Vàng mũi kiếm)", "Sơn Đầu Hỏa (Lửa đầu núi)",
+        "Giản Hạ Thủy (Nước dưới khe)", "Thành Đầu Thổ (Đất đầu thành)",
+        "Bạch Lạp Kim (Vàng chân đèn)", "Dương Liễu Mộc (Gỗ cây liễu)",
+        "Tuyền Trung Thủy (Nước trong suối)", "Ốc Thượng Thổ (Đất mái nhà)",
+        "Tích Lịch Hỏa (Lửa sấm sét)", "Tùng Bách Mộc (Gỗ tùng bách)",
+        "Trường Lưu Thủy (Nước chảy dài)", "Sa Trung Kim (Vàng trong cát)",
+        "Sơn Hạ Hỏa (Lửa dưới núi)", "Bình Địa Mộc (Gỗ đồng bằng)",
+        "Bích Thượng Thổ (Đất trên vách)", "Kim Bạch Kim (Vàng pha bạc)",
+        "Phúc Đăng Hỏa (Lửa đèn chụp)", "Thiên Hà Thủy (Nước ngân hà)",
+        "Đại Trạch Thổ (Đất nền lớn)", "Thoa Xuyến Kim (Vàng trang sức)",
+        "Tang Đố Mộc (Gỗ cây dâu)", "Đại Khê Thủy (Nước khe lớn)",
+        "Sa Trung Thổ (Đất pha cát)", "Thiên Thượng Hỏa (Lửa trên trời)",
+        "Thạch Lựu Mộc (Gỗ cây lựu)", "Đại Hải Thủy (Nước biển lớn)"
     )
 
     private const val TIME_ZONE = 7.0
@@ -334,7 +372,35 @@ object LunarCalendarEngine {
         }
         val tietKhi = TIET_KHI[getSolarTermIndex(jd)]
         val isGoodDay = ((jd + lunar.month) % 3 != 1)
-        val qualityLabel = if (isGoodDay) "Ngày Hoàng Đạo (Tốt cho khai trương, xuất hành, cầu phúc)" else "Ngày Bình Thường (Nên thận trọng việc lớn)"
+        val qualityLabel = if (isGoodDay) {
+            "Ngày Hoàng Đạo (Cát lợi cho khai trương, xuất hành, cầu phúc)"
+        } else {
+            "Ngày Bình Thường (Nên ưu tiên việc thường nhật, chuẩn bị kế hoạch)"
+        }
+
+        val canIndex = (jd + 9) % 10
+        val chiIndex = (jd + 1) % 12
+        val nguHanh = NGU_HANH_NAP_AM[((jd + 49) % 60 + 60) % 60 / 2]
+        val truc = THAP_NHI_TRUC[(chiIndex - lunar.month + 13).mod(12)]
+        val huongXuatHanh = when (canIndex) {
+            0, 5 -> "Hỷ Thần: Đông Bắc • Tài Thần: Đông Nam"
+            1, 6 -> "Hỷ Thần: Tây Bắc • Tài Thần: Đông Nam"
+            2, 7 -> "Hỷ Thần: Tây Nam • Tài Thần: Chính Đông"
+            3, 8 -> "Hỷ Thần: Chính Nam • Tài Thần: Chính Đông"
+            else -> "Hỷ Thần: Đông Nam • Tài Thần: Chính Bắc"
+        }
+
+        val viecNenLam = if (isGoodDay) {
+            listOf("Xuất hành", "Khai trương", "Giao dịch ký kết", "Cầu tài lộc", "Cúng lễ gia tiên", "Họp mặt gia đình")
+        } else {
+            listOf("Sắp xếp công việc", "Dọn dẹp nhà cửa", "Học tập nghiên cứu", "Làm việc thiện", "Chăm sóc sức khỏe")
+        }
+
+        val viecKiengKy = if (isGoodDay) {
+            listOf("Tranh chấp nóng vội", "Đi muộn giờ hẹn")
+        } else {
+            listOf("Khởi công lớn", "Đầu tư mạo hiểm", "Tranh cãi bất hòa")
+        }
 
         return DayDetailInfo(
             solarDay = solarDay,
@@ -349,8 +415,24 @@ object LunarCalendarEngine {
             zodiacHours = getAuspiciousHours(jd),
             holidays = getHolidaysForDate(solarDay, solarMonth, lunar),
             isGoodDay = isGoodDay,
-            dayQualityLabel = qualityLabel
+            dayQualityLabel = qualityLabel,
+            nguHanhNgay = nguHanh,
+            trucNgay = truc,
+            huongXuatHanh = huongXuatHanh,
+            viecNenLam = viecNenLam,
+            viecKiengKy = viecKiengKy
         )
+    }
+
+    fun daysBetweenSolarDates(
+        fromDay: Int,
+        fromMonth: Int,
+        fromYear: Int,
+        toDay: Int,
+        toMonth: Int,
+        toYear: Int
+    ): Int {
+        return jdFromDate(toDay, toMonth, toYear) - jdFromDate(fromDay, fromMonth, fromYear)
     }
 
     fun getDaysInSolarMonth(month: Int, year: Int): Int {

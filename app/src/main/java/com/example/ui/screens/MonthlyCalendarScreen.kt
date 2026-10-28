@@ -241,6 +241,15 @@ fun MonthlyCalendarScreen(
         }
 
         items(upcomingHolidays) { (info, holiday) ->
+            val daysAway = LunarCalendarEngine.daysBetweenSolarDates(
+                selectedDay, selectedMonth, selectedYear,
+                info.solarDay, info.solarMonth, info.solarYear
+            )
+            val countdownLabel = when {
+                daysAway <= 0 -> "Hôm nay"
+                daysAway == 1 -> "Ngày mai"
+                else -> "Còn $daysAway ngày"
+            }
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -292,6 +301,19 @@ fun MonthlyCalendarScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = if (daysAway == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+                    ) {
+                        Text(
+                            text = countdownLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (daysAway == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
                 }
@@ -676,6 +698,49 @@ private fun SelectedDayInsightCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            if (dayDetail.nguHanhNgay.isNotBlank() || dayDetail.trucNgay.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "☯ Ngũ hành: ${dayDetail.nguHanhNgay}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "✦ Trực: ${dayDetail.trucNgay}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "🧭 Xuất hành: ${dayDetail.huongXuatHanh}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (dayDetail.viecNenLam.isNotEmpty()) {
+                            Text(
+                                text = "✓ Nên làm: ${dayDetail.viecNenLam.joinToString(", ")}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        if (dayDetail.viecKiengKy.isNotEmpty()) {
+                            Text(
+                                text = "⚠ Lưu ý: ${dayDetail.viecKiengKy.joinToString(", ")}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 

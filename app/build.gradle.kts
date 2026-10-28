@@ -25,8 +25,17 @@ android {
     applicationId = "com.aistudio.lichvannien.vnkpxr"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    val baseVersion = "1.1"
+    val ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+    versionCode = if (ciRunNumber != null && ciRunNumber > 0) (100 + ciRunNumber) else 2
+    versionName = if (ciRunNumber != null && ciRunNumber > 0) {
+      val parts = baseVersion.split(".")
+      val major = parts.getOrNull(0)?.toIntOrNull() ?: 1
+      val minor = (parts.getOrNull(1)?.toIntOrNull() ?: 1) + 1
+      "$major.$minor.$ciRunNumber"
+    } else {
+      baseVersion
+    }
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

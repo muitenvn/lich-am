@@ -88,7 +88,8 @@ jobs:
           echo "=== Kiểm tra dấu vân tay chữ ký số (SHA-1 & SHA-256) ==="
           keytool -list -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android
 
-      - name: 6. Biên dịch APK (Release & Debug đã đồng bộ chữ ký)
+      - name: 6. Tự động nâng phiên bản mới (1.1 -> 1.2.${{ github.run_number }}) & Biên dịch APK
+        id: build_apk
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
         run: |
@@ -96,6 +97,18 @@ jobs:
           if [ ! -d "$ANDROID_SDK_ROOT/platforms/android-36.1" ]; then
             sed -i 's/compileSdk { version = release(36) { minorApiLevel = 1 } }/compileSdk = 36/g' app/build.gradle.kts || true
           fi
+
+          # Đọc phiên bản gốc (1.1) và tự động cộng tăng dần thành 1.2.<run_number> (ví dụ: 1.2.4)
+          BASE_VER=$(grep -oP 'val baseVersion = "\K[^"]+' app/build.gradle.kts || echo "1.1")
+          MAJOR=$(echo "$BASE_VER" | cut -d. -f1)
+          MINOR=$(echo "$BASE_VER" | cut -d. -f2)
+          NEXT_MINOR=$((MINOR + 1))
+          NEW_VERSION="${MAJOR}.${NEXT_MINOR}.${{ github.run_number }}"
+          NEW_CODE=$((100 + ${{ github.run_number }}))
+
+          echo "Phiên bản gốc: $BASE_VER -> Phiên bản mới tự động: $NEW_VERSION (versionCode: $NEW_CODE)"
+          echo "app_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
           gradle assembleRelease assembleDebug --no-daemon
 
       - name: 7. Xác thực chữ ký APK & Chuẩn bị file phát hành
@@ -106,7 +119,7 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v1.0.${{ github.run_number }}"
+            TAG_NAME="v${{ steps.build_apk.outputs.app_version }}"
           fi
 
           REL_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)

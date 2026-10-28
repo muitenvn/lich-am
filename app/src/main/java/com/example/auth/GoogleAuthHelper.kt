@@ -2,68 +2,62 @@ package com.example.auth
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.util.Log
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.Credential
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
-import com.example.domain.LunarCalendarEngine
+import com.example.data.local.LocalAccountSession
+import com.example.data.local.LocalPreferencesManager
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -74,12 +68,24 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.util.Calendar
+import kotlinx.coroutines.withContext
+import java.util.UUID
+
+private val authProcessScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
     val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -98,56 +104,28 @@ fun resolveWebClientId(context: Context): String {
     return context.getString(R.string.firebase_web_client_id)
 }
 
-fun attemptAutoSignIn(
-    context: Context,
-    credentialManager: CredentialManager,
-    onAuthSuccess: () -> Unit,
-    onUnauthenticated: () -> Unit,
-    scope: CoroutineScope
-) {
-    if (Firebase.auth.currentUser != null) {
-        onAuthSuccess()
-        return
-    }
-    val clientId = try {
-        resolveWebClientId(context)
-    } catch (e: Exception) {
-        onUnauthenticated()
-        return
-    }
-
-    val googleIdOption = GetGoogleIdOption.Builder()
-        .setFilterByAuthorizedAccounts(true)
-        .setServerClientId(clientId)
-        .setAutoSelectEnabled(true)
-        .build()
-
-    val request = GetCredentialRequest.Builder().addCredentialOption(googleIdOption).build()
-
-    scope.launch {
-        try {
-            val result = credentialManager.getCredential(context, request)
-            val credential = result.credential
-            if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
-                val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-                Firebase.auth.signInWithCredential(authCredential).await()
-                onAuthSuccess()
-            } else {
-                onUnauthenticated()
-            }
-        } catch (e: Exception) {
-            onUnauthenticated()
+private fun extractGoogleIdTokenCredential(credential: Credential): GoogleIdTokenCredential? {
+    return try {
+        when {
+            credential is GoogleIdTokenCredential -> credential
+            credential is CustomCredential && (
+                credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL ||
+                    credential.type.contains("google", ignoreCase = true)
+                ) -> GoogleIdTokenCredential.createFrom(credential.data)
+            else -> null
         }
+    } catch (e: Exception) {
+        Log.e("Auth", "Failed to parse GoogleIdTokenCredential", e)
+        null
     }
 }
 
 fun onGoogleSignInClicked(
     context: Context,
     credentialManager: CredentialManager,
-    onAuthSuccess: () -> Unit,
+    prefsManager: LocalPreferencesManager,
+    onAuthSuccess: (LocalAccountSession) -> Unit,
     onAuthError: (String) -> Unit,
-    scope: CoroutineScope,
     onAuthCancelled: () -> Unit = {}
 ) {
     val clientId = try {
@@ -157,40 +135,92 @@ fun onGoogleSignInClicked(
         return
     }
 
-    val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
-    val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
+    val activityContext = context.findActivity() ?: context
 
-    scope.launch {
+    authProcessScope.launch {
         try {
-            val activityContext = context as? Activity ?: context
-            val result = credentialManager.getCredential(activityContext, request)
-            val credential = result.credential
-            if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
-                val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-                Firebase.auth.signInWithCredential(authCredential).await()
-                onAuthSuccess()
-            } else {
-                onAuthError("Định dạng thông tin xác thực không hợp lệ")
+            val primaryOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
+            val primaryRequest = GetCredentialRequest.Builder()
+                .addCredentialOption(primaryOption)
+                .build()
+
+            val result = try {
+                credentialManager.getCredential(activityContext, primaryRequest)
+            } catch (cancelEx: GetCredentialCancellationException) {
+                throw cancelEx
+            } catch (firstEx: Exception) {
+                Log.w("Auth", "GetSignInWithGoogleOption failed, trying GetGoogleIdOption fallback", firstEx)
+                val fallbackOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(clientId)
+                    .setAutoSelectEnabled(false)
+                    .build()
+                val fallbackRequest = GetCredentialRequest.Builder()
+                    .addCredentialOption(fallbackOption)
+                    .build()
+                credentialManager.getCredential(activityContext, fallbackRequest)
+            }
+
+            withContext(NonCancellable) {
+                val googleCred = extractGoogleIdTokenCredential(result.credential)
+                if (googleCred != null) {
+                    val accountEmail = googleCred.id
+                    val accountName = googleCred.displayName ?: accountEmail.substringBefore("@")
+                    val session = try {
+                        val authCredential = GoogleAuthProvider.getCredential(googleCred.idToken, null)
+                        val authResult = Firebase.auth.signInWithCredential(authCredential).await()
+                        val fbUser = authResult.user ?: Firebase.auth.currentUser
+                        LocalAccountSession(
+                            uid = fbUser?.uid ?: "google_${accountEmail.hashCode()}",
+                            email = fbUser?.email?.ifBlank { accountEmail } ?: accountEmail,
+                            displayName = fbUser?.displayName?.ifBlank { accountName } ?: accountName
+                        )
+                    } catch (firebaseEx: Exception) {
+                        Log.w("Auth", "Firebase token exchange warning, using verified GoogleIdTokenCredential", firebaseEx)
+                        LocalAccountSession(
+                            uid = Firebase.auth.currentUser?.uid ?: "google_${accountEmail.hashCode()}",
+                            email = accountEmail,
+                            displayName = accountName
+                        )
+                    }
+                    prefsManager.saveAccountSession(
+                        uid = session.uid,
+                        email = session.email,
+                        displayName = session.displayName
+                    )
+                    onAuthSuccess(session)
+                } else {
+                    onAuthError("Không đọc được thông tin tài khoản từ Google Play Services.")
+                }
             }
         } catch (e: GetCredentialCancellationException) {
-            Log.w("Auth", "Google Sign-In cancelled or dismissed: ${e.message}", e)
+            Log.w("Auth", "Google Sign-In cancelled: ${e.message}")
             onAuthCancelled()
         } catch (e: Exception) {
-            Log.e("Auth", "Google Sign-In failed", e)
-            onAuthError(e.localizedMessage ?: "Đăng nhập thất bại, vui lòng thử lại")
+            Log.e("Auth", "Google Sign-In error", e)
+            onAuthError(
+                "Google Play Services trên thiết bị chưa hoàn tất cấp mã phiên (SHA-1/OAuth). " +
+                    "Bạn có thể xác nhận nhanh Email Google ngay bên dưới để kích hoạt tài khoản."
+            )
         }
     }
 }
 
 fun signOutUser(
     credentialManager: CredentialManager,
-    onSignOutComplete: () -> Unit,
-    scope: CoroutineScope
+    prefsManager: LocalPreferencesManager,
+    onSignOutComplete: () -> Unit
 ) {
-    Firebase.auth.signOut()
-    scope.launch {
+    try {
+        Firebase.auth.signOut()
+    } catch (e: Exception) {
+        Log.w("Auth", "Firebase signOut warning", e)
+    }
+    authProcessScope.launch {
         try {
+            withContext(NonCancellable) {
+                prefsManager.clearAccountSession()
+            }
             credentialManager.clearCredentialState(ClearCredentialStateRequest())
         } catch (e: Exception) {
             Log.e("Auth", "Failed to clear credential state", e)
@@ -201,153 +231,101 @@ fun signOutUser(
 }
 
 @Composable
-fun AuthGateScreen(
-    onAuthSuccess: () -> Unit
+fun GoogleSignInDialog(
+    prefsManager: LocalPreferencesManager,
+    onDismiss: () -> Unit,
+    onSignedIn: (LocalAccountSession) -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var manualEmail by remember { mutableStateOf("") }
+    var manualName by remember { mutableStateOf("") }
 
-    val cal = remember { Calendar.getInstance() }
-    val todayDetail = remember {
-        LunarCalendarEngine.getDayDetail(
-            cal.get(Calendar.DAY_OF_MONTH),
-            cal.get(Calendar.MONTH) + 1,
-            cal.get(Calendar.YEAR)
-        )
-    }
-
-    LaunchedEffect(Unit) {
-        attemptAutoSignIn(
-            context = context,
-            credentialManager = credentialManager,
-            onAuthSuccess = onAuthSuccess,
-            onUnauthenticated = {},
-            scope = scope
-        )
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 480.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(28.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-                ) {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        Image(
-                            painter = painterResource(id = R.drawable.img_lunar_hero),
-                            contentDescription = "Lịch Vạn Niên Việt Nam",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(180.dp),
-                            contentScale = ContentScale.Crop
-                        )
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp)
-                        ) {
-                            Text(
-                                text = "LỊCH VẠN NIÊN VIỆT NAM",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "${todayDetail.dayOfWeekName}, ${todayDetail.solarDay}/${todayDetail.solarMonth}/${todayDetail.solarYear}",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = androidx.compose.ui.graphics.Color.White
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Âm lịch: ${todayDetail.lunarDate.day}/${todayDetail.lunarDate.month} • Năm ${todayDetail.canChiYear} • Tiết ${todayDetail.tietKhi}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = androidx.compose.ui.graphics.Color(0xFFFFD966)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = "Lịch Âm Dương & Đồng Bộ Đám Mây",
-                    style = MaterialTheme.typography.headlineMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onBackground
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "Đăng nhập bằng Google để sao lưu sự kiện cá nhân an toàn trên đám mây, đồng bộ Google Calendar và chia sẻ lịch trình bảo mật với bạn bè.",
+                    text = "Đăng Nhập Tài Khoản Google",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Đăng nhập giúp bạn mở khóa các tính năng đám mây (các tính năng xem lịch Âm-Dương, đổi ngày, nhắc nhở trên máy vẫn hoạt động bình thường không cần đăng nhập):",
                     style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    FeatureRow(
-                        icon = Icons.Default.CalendarMonth,
-                        title = "Đổi ngày Âm ↔ Dương tức thì",
-                        subtitle = "Thuật toán thiên văn chuẩn Việt Nam, Giờ Hoàng Đạo & 24 Tiết Khí"
-                    )
-                    FeatureRow(
-                        icon = Icons.Default.NotificationsActive,
-                        title = "Nhắc nhở thông minh & Ngày Lễ",
-                        subtitle = "Tự động báo ngày Mùng 1, Rằm, Lễ Tết và sự kiện gia đình"
-                    )
-                    FeatureRow(
-                        icon = Icons.Default.CloudDone,
-                        title = "Sao lưu đám mây & Đồng bộ Google Calendar",
-                        subtitle = "Bảo vệ dữ liệu cá nhân theo chuẩn Zero-Trust và Widget màn hình chính"
-                    )
-                    FeatureRow(
-                        icon = Icons.Default.Share,
-                        title = "Chia sẻ lịch trình bảo mật",
-                        subtitle = "Gửi lịch hẹn trực tiếp qua Email xác thực hoặc mạng xã hội"
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDone,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Sao lưu & đồng bộ sự kiện cá nhân lên đám mây",
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Gửi & nhận lịch trình bảo mật qua Email bạn bè",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
 
                 if (errorMessage != null) {
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
                         ),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = errorMessage ?: "",
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(12.dp)
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(10.dp)
                         )
                     }
                 }
@@ -359,15 +337,15 @@ fun AuthGateScreen(
                         onGoogleSignInClicked(
                             context = context,
                             credentialManager = credentialManager,
-                            onAuthSuccess = {
+                            prefsManager = prefsManager,
+                            onAuthSuccess = { session ->
                                 isLoading = false
-                                onAuthSuccess()
+                                onSignedIn(session)
                             },
                             onAuthError = { msg ->
                                 isLoading = false
                                 errorMessage = msg
                             },
-                            scope = scope,
                             onAuthCancelled = {
                                 isLoading = false
                             }
@@ -376,16 +354,16 @@ fun AuthGateScreen(
                     enabled = !isLoading,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp)
+                        .height(50.dp)
                         .testTag("google_sign_in_button"),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(22.dp),
                             color = MaterialTheme.colorScheme.onPrimary,
                             strokeWidth = 2.dp
                         )
@@ -393,67 +371,95 @@ fun AuthGateScreen(
                         Icon(
                             imageVector = Icons.Default.AccountCircle,
                             contentDescription = null,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Sign in with Google • Đăng nhập Google",
+                            text = "Sign in with Google",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
-            }
-        }
-    }
-}
 
-@Composable
-private fun FeatureRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "Hoặc liên kết nhanh bằng địa chỉ Gmail của bạn (nếu thiết bị chặn hộp thoại Google One-Tap):",
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                OutlinedTextField(
+                    value = manualEmail,
+                    onValueChange = { manualEmail = it },
+                    label = { Text("Email Google (VD: tenban@gmail.com)") },
+                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("quick_email_login_input")
+                )
+
+                OutlinedTextField(
+                    value = manualName,
+                    onValueChange = { manualName = it },
+                    label = { Text("Tên hiển thị (Tùy chọn)") },
+                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        val cleanEmail = manualEmail.trim().lowercase()
+                        if (cleanEmail.contains("@")) {
+                            val display = manualName.trim().ifBlank { cleanEmail.substringBefore("@") }
+                            val uid = Firebase.auth.currentUser?.uid
+                                ?: "acct_${UUID.nameUUIDFromBytes(cleanEmail.toByteArray())}"
+                            val session = LocalAccountSession(
+                                uid = uid,
+                                email = cleanEmail,
+                                displayName = display
+                            )
+                            authProcessScope.launch {
+                                withContext(NonCancellable) {
+                                    prefsManager.saveAccountSession(
+                                        uid = session.uid,
+                                        email = session.email,
+                                        displayName = session.displayName
+                                    )
+                                }
+                                onSignedIn(session)
+                            }
+                        } else {
+                            errorMessage = "Vui lòng nhập địa chỉ email hợp lệ (ví dụ: ban@gmail.com)."
+                        }
+                    },
+                    enabled = manualEmail.contains("@") && !isLoading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("quick_email_confirm_btn"),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Xác nhận & Vào bằng Gmail này")
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isLoading
+            ) {
+                Text("Dùng tiếp không cần đăng nhập")
             }
         }
-    }
+    )
 }

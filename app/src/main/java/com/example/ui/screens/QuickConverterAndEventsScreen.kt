@@ -380,6 +380,8 @@ fun EventsAndRemindersScreen(
     selectedDay: Int,
     selectedMonth: Int,
     selectedYear: Int,
+    isSignedIn: Boolean = false,
+    onRequestSignIn: () -> Unit = {},
     onAddEvent: (String, String, Int, Int, Int, Boolean, String, Long) -> Unit,
     onDeleteEvent: (String) -> Unit,
     onSyncToGoogle: (CalendarEvent) -> Unit,
@@ -414,7 +416,7 @@ fun EventsAndRemindersScreen(
                         style = MaterialTheme.typography.headlineMedium
                     )
                     Text(
-                        text = "Đồng bộ Google Calendar và nhắc lịch tự động theo cả Âm lịch & Dương lịch.",
+                        text = "Xem và lưu sự kiện ngay trên máy (không bắt buộc đăng nhập) hoặc bật sao lưu đám mây.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -427,6 +429,45 @@ fun EventsAndRemindersScreen(
                     Icon(imageVector = Icons.Default.Add, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Thêm")
+                }
+            }
+        }
+
+        if (!isSignedIn) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Đang dùng Chế độ Không Đăng Nhập (Lưu trên thiết bị)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Bạn vẫn tạo và xem sự kiện bình thường. Đăng nhập Google nếu muốn sao lưu đám mây.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedButton(
+                            onClick = onRequestSignIn,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.testTag("events_sign_in_prompt_btn")
+                        ) {
+                            Text("Đăng nhập")
+                        }
+                    }
                 }
             }
         }
@@ -767,7 +808,7 @@ fun CreateEventDialog(
                 enabled = title.isNotBlank(),
                 modifier = Modifier.testTag("dialog_save_event_btn")
             ) {
-                Text("Lưu đám mây")
+                Text("Lưu sự kiện")
             }
         },
         dismissButton = {
