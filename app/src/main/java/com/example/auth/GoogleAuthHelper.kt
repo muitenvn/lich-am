@@ -89,6 +89,15 @@ fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
     awaitClose { removeAuthStateListener(listener) }
 }
 
+fun resolveWebClientId(context: Context): String {
+    val dynamicId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+    if (dynamicId != 0) {
+        val value = context.getString(dynamicId)
+        if (value.isNotBlank()) return value
+    }
+    return context.getString(R.string.firebase_web_client_id)
+}
+
 fun attemptAutoSignIn(
     context: Context,
     credentialManager: CredentialManager,
@@ -101,7 +110,7 @@ fun attemptAutoSignIn(
         return
     }
     val clientId = try {
-        context.getString(R.string.default_web_client_id)
+        resolveWebClientId(context)
     } catch (e: Exception) {
         onUnauthenticated()
         return
@@ -142,7 +151,7 @@ fun onGoogleSignInClicked(
     onAuthCancelled: () -> Unit = {}
 ) {
     val clientId = try {
-        context.getString(R.string.default_web_client_id)
+        resolveWebClientId(context)
     } catch (e: Exception) {
         onAuthError("Không tìm thấy cấu hình Google Sign-In (default_web_client_id)")
         return

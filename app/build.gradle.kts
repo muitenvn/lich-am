@@ -1,5 +1,6 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 import java.time.Duration
+import java.util.Base64
 
 plugins {
   alias(libs.plugins.android.application)
@@ -7,6 +8,13 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
+}
+
+val googleServicesFile = file("google-services.json")
+val googleServicesBase64File = file("google-services.json.base64")
+if (!googleServicesFile.exists() && googleServicesBase64File.exists()) {
+  val cleanBase64 = googleServicesBase64File.readText().replace("\\s".toRegex(), "")
+  googleServicesFile.writeBytes(Base64.getDecoder().decode(cleanBase64))
 }
 
 android {

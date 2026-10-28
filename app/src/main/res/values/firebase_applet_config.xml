@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <resources>
     <string name="firestore_database_id" translatable="false">ai-studio-android-lunarsyn-fe8ea9bd-99e1-4e8f-90b3-e6c29371579a</string>
+    <string name="firebase_web_client_id" translatable="false">801726861967-6v0n4r1qnposugbqfvrdar1ro53mm1bq.apps.googleusercontent.com</string>
 </resources>
