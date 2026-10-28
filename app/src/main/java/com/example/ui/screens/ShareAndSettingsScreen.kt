@@ -372,10 +372,10 @@ fun SettingsAndCloudScreen(
 
     val githubWorkflowSnippet = remember {
         """
-name: Build & Release Signed APK
+name: Build and Release Signed APK
 on:
   push:
-    branches: [ main, master, '**' ]
+    branches: [ main, master ]
     tags: [ 'v*' ]
   workflow_dispatch:
 permissions:
@@ -384,17 +384,20 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    env:
+      STORE_PASSWORD: android
+      KEY_PASSWORD: android
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android SDK 36
+      - name: Cấu hình Android SDK (API 36)
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "build-tools;36.0.0" "platforms;android-36" || true
+          SDKMANAGER=${'$'}(find "${'$'}{ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools" -name sdkmanager | tail -n 1)
+          yes | "${'$'}SDKMANAGER" --licenses > /dev/null || true
+          "${'$'}SDKMANAGER" --install "platform-tools" "build-tools;36.0.0" "platforms;android-36" || true
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
@@ -403,13 +406,11 @@ jobs:
           base64 -d debug.keystore.base64 > debug.keystore
           rm -f my-upload-key.jks
           keytool -importkeystore -srckeystore debug.keystore -destkeystore my-upload-key.jks \
-            -srcstoretype PKCS12 -deststoretype PKCS12 -srcstorepass android -deststorepass android \
+            -srcstorepass android -deststorepass android \
             -srckeypass android -destkeypass android -srcalias androiddebugkey -destalias upload -noprompt
       - name: Build Signed Release & Debug APK
         env:
           KEYSTORE_PATH: ${'$'}{{ github.workspace }}/my-upload-key.jks
-          STORE_PASSWORD: android
-          KEY_PASSWORD: android
         run: |
           sed -i 's/compileSdk { version = release(36) { minorApiLevel = 1 } }/compileSdk = 36/g' app/build.gradle.kts || true
           gradle assembleRelease assembleDebug --no-daemon
