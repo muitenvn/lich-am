@@ -92,10 +92,7 @@ object SmartReminderHelper {
     }
 
     fun triggerSmartDailyBriefing(context: Context): Boolean {
-        val cal = Calendar.getInstance()
-        val d = cal.get(Calendar.DAY_OF_MONTH)
-        val m = cal.get(Calendar.MONTH) + 1
-        val y = cal.get(Calendar.YEAR)
+        val (d, m, y) = LunarCalendarEngine.getDeviceDateInVietnam()
         val detail = LunarCalendarEngine.getDayDetail(d, m, y)
         val holidayText = if (detail.holidays.isNotEmpty()) {
             "Sự kiện: ${detail.holidays.joinToString { it.title }}."

@@ -62,10 +62,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.CalendarEvent
+import com.example.data.remote.CalendarSyncStatus
 import com.example.domain.DayDetailInfo
 import com.example.domain.LunarCalendarEngine
 import com.example.notifications.SmartReminderHelper
-import java.util.Calendar
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -73,20 +73,25 @@ fun MonthlyCalendarScreen(
     selectedDay: Int,
     selectedMonth: Int,
     selectedYear: Int,
+    todayTriple: Triple<Int, Int, Int> = LunarCalendarEngine.getDeviceDateInVietnam(),
+    syncStatus: CalendarSyncStatus? = null,
+    isSyncingOfficialDate: Boolean = false,
+    dataVersion: Int = 0,
     events: List<CalendarEvent>,
     onSelectDate: (Int, Int, Int) -> Unit,
     onNavigateMonth: (Int) -> Unit,
     onJumpToToday: () -> Unit,
+    onSyncOfficialDate: () -> Unit = {},
     onOpenQuickConverter: () -> Unit,
     onOpenAddEventDialog: () -> Unit,
     onSyncEventToGoogle: (CalendarEvent) -> Unit
 ) {
     val context = LocalContext.current
-    val dayDetail = remember(selectedDay, selectedMonth, selectedYear) {
+    val dayDetail = remember(selectedDay, selectedMonth, selectedYear, dataVersion) {
         LunarCalendarEngine.getDayDetail(selectedDay, selectedMonth, selectedYear)
     }
 
-    val dayEvents = remember(selectedDay, selectedMonth, selectedYear, events) {
+    val dayEvents = remember(selectedDay, selectedMonth, selectedYear, events, dataVersion) {
         events.filter { evt ->
             val matchesSolar = evt.solarDay.toInt() == selectedDay &&
                     evt.solarMonth.toInt() == selectedMonth &&
@@ -98,7 +103,7 @@ fun MonthlyCalendarScreen(
         }
     }
 
-    val upcomingHolidays = remember(selectedDay, selectedMonth, selectedYear) {
+    val upcomingHolidays = remember(selectedDay, selectedMonth, selectedYear, dataVersion) {
         LunarCalendarEngine.getAllUpcomingHolidays(selectedDay, selectedMonth, selectedYear, count = 6)
     }
 
@@ -109,6 +114,17 @@ fun MonthlyCalendarScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // 0. Official Online / Offline Data Source Status Banner
+        item {
+            OfficialDataSourceStatusCard(
+                syncStatus = syncStatus,
+                todayTriple = todayTriple,
+                dayDetail = dayDetail,
+                isSyncing = isSyncingOfficialDate,
+                onSyncOfficialDate = onSyncOfficialDate
+            )
+        }
+
         // 1. Hero Dual Lunar-Solar Card
         item {
             HeroDayBannerCard(
@@ -124,6 +140,8 @@ fun MonthlyCalendarScreen(
                 selectedDay = selectedDay,
                 selectedMonth = selectedMonth,
                 selectedYear = selectedYear,
+                todayTriple = todayTriple,
+                dataVersion = dataVersion,
                 events = events,
                 onSelectDate = onSelectDate,
                 onNavigateMonth = onNavigateMonth
@@ -323,6 +341,75 @@ fun MonthlyCalendarScreen(
 }
 
 @Composable
+private fun OfficialDataSourceStatusCard(
+    syncStatus: CalendarSyncStatus?,
+    todayTriple: Triple<Int, Int, Int>,
+    dayDetail: DayDetailInfo,
+    isSyncing: Boolean,
+    onSyncOfficialDate: () -> Unit
+) {
+    val isOnline = syncStatus?.isOnline == true
+    val modeTitle = when {
+        isSyncing -> "⏳ Đang truy vấn dữ liệu lịch chính thức trực tuyến..."
+        isOnline -> "🌐 Trực tuyến: Dữ liệu Lịch Chính Thức"
+        else -> "📱 Ngoại tuyến: Dựa vào đồng hồ điện thoại (UTC+7)"
+    }
+    val sourceText = syncStatus?.sourceName ?: dayDetail.dataSourceLabel
+    val todayFormatted = String.format("%02d/%02d/%04d", todayTriple.first, todayTriple.second, todayTriple.third)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("official_data_source_card"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOnline) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+            } else {
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = modeTitle,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Hôm nay (VN): $todayFormatted • Nguồn: $sourceText",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            FilledTonalButton(
+                onClick = onSyncOfficialDate,
+                enabled = !isSyncing,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.testTag("sync_official_source_btn")
+            ) {
+                Text(
+                    text = if (isSyncing) "Đang tải..." else "Tra trực tuyến",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun HeroDayBannerCard(
     dayDetail: DayDetailInfo,
     onJumpToToday: () -> Unit,
@@ -475,14 +562,15 @@ private fun MonthCalendarGridCard(
     selectedDay: Int,
     selectedMonth: Int,
     selectedYear: Int,
+    todayTriple: Triple<Int, Int, Int>,
+    dataVersion: Int,
     events: List<CalendarEvent>,
     onSelectDate: (Int, Int, Int) -> Unit,
     onNavigateMonth: (Int) -> Unit
 ) {
-    val todayCal = remember { Calendar.getInstance() }
-    val todayDay = todayCal.get(Calendar.DAY_OF_MONTH)
-    val todayMonth = todayCal.get(Calendar.MONTH) + 1
-    val todayYear = todayCal.get(Calendar.YEAR)
+    val todayDay = todayTriple.first
+    val todayMonth = todayTriple.second
+    val todayYear = todayTriple.third
 
     val daysInMonth = LunarCalendarEngine.getDaysInSolarMonth(selectedMonth, selectedYear)
     // Monday-first grid offset (0 = T2, 6 = CN)
@@ -519,7 +607,9 @@ private fun MonthCalendarGridCard(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    val midLunar = LunarCalendarEngine.solarToLunar(15, selectedMonth, selectedYear)
+                    val midLunar = remember(selectedMonth, selectedYear, dataVersion) {
+                        LunarCalendarEngine.solarToLunar(15, selectedMonth, selectedYear)
+                    }
                     Text(
                         text = "Tháng ${midLunar.month} Âm lịch • Năm ${LunarCalendarEngine.getCanChiYear(midLunar.year)}",
                         style = MaterialTheme.typography.labelSmall,
@@ -716,8 +806,14 @@ private fun SelectedDayInsightCard(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        if (dayDetail.saoHoangDao.isNotBlank()) {
+                            Text(
+                                text = "🌟 Nhị Thập Bát Tú / Thập Nhị Sao: ${dayDetail.saoHoangDao}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                         Text(
-                            text = "✦ Trực: ${dayDetail.trucNgay}",
+                            text = "✦ Trực (Kiến Trừ): ${dayDetail.trucNgay}",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
@@ -738,6 +834,11 @@ private fun SelectedDayInsightCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Text(
+                            text = "📡 Nguồn lịch: ${dayDetail.dataSourceLabel}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

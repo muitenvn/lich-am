@@ -1,5 +1,6 @@
 package com.example.ui
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,6 +8,8 @@ import com.example.data.local.LocalPreferencesManager
 import com.example.data.model.CalendarEvent
 import com.example.data.model.SharedSchedule
 import com.example.data.model.UserPreference
+import com.example.data.remote.CalendarSyncStatus
+import com.example.data.remote.OfficialCalendarDataSource
 import com.example.data.repository.CalendarRepository
 import com.example.domain.DayDetailInfo
 import com.example.domain.LunarCalendarEngine
@@ -22,7 +25,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.util.Calendar
 
 sealed interface UiState<out T> {
     data object Loading : UiState<Nothing>
@@ -46,14 +48,26 @@ class CalendarViewModel(
             currentUserId.isNotBlank() && prefsManager == null
         }
 
-    private val initialCal = Calendar.getInstance()
-    private val _selectedDay = MutableStateFlow(initialCal.get(Calendar.DAY_OF_MONTH))
-    private val _selectedMonth = MutableStateFlow(initialCal.get(Calendar.MONTH) + 1)
-    private val _selectedYear = MutableStateFlow(initialCal.get(Calendar.YEAR))
+    private val initialVnDate = LunarCalendarEngine.getDeviceDateInVietnam()
+    private val _selectedDay = MutableStateFlow(initialVnDate.first)
+    private val _selectedMonth = MutableStateFlow(initialVnDate.second)
+    private val _selectedYear = MutableStateFlow(initialVnDate.third)
 
     val selectedDay: StateFlow<Int> = _selectedDay.asStateFlow()
     val selectedMonth: StateFlow<Int> = _selectedMonth.asStateFlow()
     val selectedYear: StateFlow<Int> = _selectedYear.asStateFlow()
+
+    private val _todayTriple = MutableStateFlow(initialVnDate)
+    val todayTriple: StateFlow<Triple<Int, Int, Int>> = _todayTriple.asStateFlow()
+
+    private val _calendarSyncStatus = MutableStateFlow<CalendarSyncStatus?>(null)
+    val calendarSyncStatus: StateFlow<CalendarSyncStatus?> = _calendarSyncStatus.asStateFlow()
+
+    private val _isSyncingOfficialDate = MutableStateFlow(false)
+    val isSyncingOfficialDate: StateFlow<Boolean> = _isSyncingOfficialDate.asStateFlow()
+
+    private val _dataVersion = MutableStateFlow(0)
+    val dataVersion: StateFlow<Int> = _dataVersion.asStateFlow()
 
     private val _statusBannerMessage = MutableStateFlow<String?>(null)
     val statusBannerMessage: StateFlow<String?> = _statusBannerMessage.asStateFlow()
@@ -161,14 +175,31 @@ class CalendarViewModel(
                 .stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Success(emptyList()))
         }
 
-    fun selectSolarDate(day: Int, month: Int, year: Int) {
+    fun selectSolarDate(day: Int, month: Int, year: Int, context: Context? = null) {
         val maxDay = LunarCalendarEngine.getDaysInSolarMonth(month, year)
-        _selectedYear.value = year.coerceIn(1900, 2100)
-        _selectedMonth.value = month.coerceIn(1, 12)
-        _selectedDay.value = day.coerceIn(1, maxDay)
+        val validYear = year.coerceIn(1900, 2100)
+        val validMonth = month.coerceIn(1, 12)
+        val validDay = day.coerceIn(1, maxDay)
+        _selectedYear.value = validYear
+        _selectedMonth.value = validMonth
+        _selectedDay.value = validDay
+        if (context != null) {
+            viewModelScope.launch {
+                val online = OfficialCalendarDataSource.isNetworkConnected(context)
+                if (online) {
+                    OfficialCalendarDataSource.fetchOnlineDataForDateIfConnected(
+                        context = context,
+                        solarDay = validDay,
+                        solarMonth = validMonth,
+                        solarYear = validYear
+                    )
+                    _dataVersion.value += 1
+                }
+            }
+        }
     }
 
-    fun navigateMonth(delta: Int) {
+    fun navigateMonth(delta: Int, context: Context? = null) {
         var m = _selectedMonth.value + delta
         var y = _selectedYear.value
         while (m < 1) {
@@ -180,18 +211,71 @@ class CalendarViewModel(
             y += 1
         }
         val maxDay = LunarCalendarEngine.getDaysInSolarMonth(m, y)
-        _selectedYear.value = y.coerceIn(1900, 2100)
+        val validYear = y.coerceIn(1900, 2100)
+        val validDay = _selectedDay.value.coerceAtMost(maxDay)
+        _selectedYear.value = validYear
         _selectedMonth.value = m
-        _selectedDay.value = _selectedDay.value.coerceAtMost(maxDay)
+        _selectedDay.value = validDay
+        if (context != null) {
+            viewModelScope.launch {
+                if (OfficialCalendarDataSource.isNetworkConnected(context)) {
+                    OfficialCalendarDataSource.fetchOnlineDataForDateIfConnected(
+                        context = context,
+                        solarDay = validDay,
+                        solarMonth = m,
+                        solarYear = validYear
+                    )
+                    _dataVersion.value += 1
+                }
+            }
+        }
     }
 
-    fun jumpToToday() {
-        val now = Calendar.getInstance()
-        selectSolarDate(
-            now.get(Calendar.DAY_OF_MONTH),
-            now.get(Calendar.MONTH) + 1,
-            now.get(Calendar.YEAR)
-        )
+    fun jumpToToday(context: Context? = null) {
+        if (context != null) {
+            syncWithOfficialSource(
+                context = context,
+                updateSelectedDate = true,
+                showToastBanner = true
+            )
+        } else {
+            val today = _todayTriple.value
+            selectSolarDate(today.first, today.second, today.third)
+        }
+    }
+
+    fun syncWithOfficialSource(
+        context: Context,
+        updateSelectedDate: Boolean = false,
+        showToastBanner: Boolean = false
+    ) {
+        viewModelScope.launch {
+            _isSyncingOfficialDate.value = true
+            try {
+                val status = OfficialCalendarDataSource.syncCurrentDateAndCalendar(
+                    context = context,
+                    selectedDay = _selectedDay.value,
+                    selectedMonth = _selectedMonth.value,
+                    selectedYear = _selectedYear.value
+                )
+                _calendarSyncStatus.value = status
+                val (d, m, y) = status.currentSolarDate
+                _todayTriple.value = status.currentSolarDate
+                if (updateSelectedDate) {
+                    _selectedDay.value = d
+                    _selectedMonth.value = m
+                    _selectedYear.value = y
+                }
+                _dataVersion.value += 1
+                if (showToastBanner) {
+                    val modePrefix = if (status.isOnline) "🌐 Đã lấy ngày trực tuyến" else "📱 Đang ngoại tuyến"
+                    _statusBannerMessage.value =
+                        "$modePrefix: ${d.toString().padStart(2, '0')}/${m.toString().padStart(2, '0')}/$y • ${status.sourceName}"
+                }
+            } finally {
+                _isSyncingOfficialDate.value = false
+            }
+        }
     }
 
     fun getCurrentSelectedDayDetail(): DayDetailInfo {

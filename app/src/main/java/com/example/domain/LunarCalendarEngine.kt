@@ -1,5 +1,8 @@
 package com.example.domain
 
+import java.util.Calendar
+import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.floor
 import kotlin.math.sin
 
@@ -14,7 +17,8 @@ data class HolidayInfo(
     val title: String,
     val description: String,
     val isLunar: Boolean,
-    val isMajorHoliday: Boolean = false
+    val isMajorHoliday: Boolean = false,
+    val isOfficialOnline: Boolean = false
 )
 
 data class DayDetailInfo(
@@ -31,18 +35,25 @@ data class DayDetailInfo(
     val holidays: List<HolidayInfo>,
     val isGoodDay: Boolean,
     val dayQualityLabel: String,
+    val saoHoangDao: String = "",
     val nguHanhNgay: String = "",
     val trucNgay: String = "",
     val huongXuatHanh: String = "",
     val viecNenLam: List<String> = emptyList(),
-    val viecKiengKy: List<String> = emptyList()
+    val viecKiengKy: List<String> = emptyList(),
+    val dataSourceLabel: String = ""
 )
 
 /**
- * Astronomical Vietnamese Lunar-Solar Calendar Engine (UTC+7 Vietnam Timezone)
- * Based on Ho Ngoc Duc's astronomical algorithm.
+ * Official Vietnamese Lunar-Solar Calendar Engine (UTC+7 Vietnam Timezone - Asia/Ho_Chi_Minh)
+ * Combines:
+ * 1. Online Official Calendar & Astronomical APIs when connected to the internet
+ * 2. Official Android ICU Astronomical Ephemeris (android.icu.util.ChineseCalendar in Asia/Ho_Chi_Minh)
+ * 3. Canonical Vietnamese Astronomical Algorithm (Ho Ngoc Duc UTC+7) & Hiệp Kỷ Biện Phương Thư tables
  */
 object LunarCalendarEngine {
+
+    val VIETNAM_TIME_ZONE: TimeZone = TimeZone.getTimeZone("Asia/Ho_Chi_Minh")
 
     private val CAN = listOf("Giáp", "Ất", "Bính", "Đinh", "Mậu", "Kỷ", "Canh", "Tân", "Nhâm", "Quý")
     private val CHI = listOf("Tý", "Sửu", "Dần", "Mão", "Thìn", "Tỵ", "Ngọ", "Mùi", "Thân", "Dậu", "Tuất", "Hợi")
@@ -59,18 +70,40 @@ object LunarCalendarEngine {
         "Đông Chí", "Tiểu Hàn", "Đại Hàn", "Lập Xuân", "Vũ Thủy", "Kinh Trập"
     )
 
+    // Official 12 Sao Kiến Trừ / Hoàng Đạo - Hắc Đạo (Hiệp Kỷ Biện Phương Thư)
+    private data class SaoHoangDaoEntry(
+        val name: String,
+        val isHoangDao: Boolean,
+        val description: String
+    )
+
+    private val THAP_NHI_SAO = listOf(
+        SaoHoangDaoEntry("Thanh Long Hoàng Đạo", true, "Tốt cho mọi việc, khai trương, xuất hành, cưới hỏi"),
+        SaoHoangDaoEntry("Minh Đường Hoàng Đạo", true, "Quý nhân phù trợ, tốt cho giao dịch, nhậm chức, cầu tài"),
+        SaoHoangDaoEntry("Thiên Hình Hắc Đạo", false, "Sao Hắc Đạo — Nên ưu tiên việc thường nhật, tránh kiện tụng"),
+        SaoHoangDaoEntry("Chu Tước Hắc Đạo", false, "Sao Hắc Đạo — Nên giữ hòa khí, thận trọng lời nói và văn bản"),
+        SaoHoangDaoEntry("Kim Quỹ Hoàng Đạo", true, "Cát tinh tài lộc — Tốt cho mở kho, ký kết, tích lũy tài sản"),
+        SaoHoangDaoEntry("Thiên Đức Hoàng Đạo", true, "Phúc đức chiếu mệnh — Tốt cho cầu phúc, cúng tế, làm việc thiện"),
+        SaoHoangDaoEntry("Bạch Hổ Hắc Đạo", false, "Sao Hắc Đạo — Hạn chế động thổ hoặc đi xa mạo hiểm"),
+        SaoHoangDaoEntry("Ngọc Đường Hoàng Đạo", true, "Cát tinh công danh — Tốt cho học hành, khai bút, mở cửa hàng"),
+        SaoHoangDaoEntry("Thiên Lao Hắc Đạo", false, "Sao Hắc Đạo — Nên dọn dẹp, sắp xếp nội bộ, nghỉ ngơi"),
+        SaoHoangDaoEntry("Nguyên Vũ Hắc Đạo", false, "Sao Hắc Đạo — Thận trọng giao dịch tiền bạc lớn"),
+        SaoHoangDaoEntry("Tư Mệnh Hoàng Đạo", true, "Cát tinh bình an — Tốt cho cầu an, sửa chữa, sum họp gia đình"),
+        SaoHoangDaoEntry("Câu Trận Hắc Đạo", false, "Sao Hắc Đạo — Không nên vội vàng thay đổi kế hoạch lớn")
+    )
+
     private val THAP_NHI_TRUC = listOf(
-        "Trực Kiến (Tốt xuất hành, khai trương)",
+        "Trực Kiến (Tốt xuất hành, nhậm chức, khởi sự)",
         "Trực Trừ (Tốt cầu phúc, giải hạn, dọn dẹp)",
-        "Trực Mãn (Tốt mở kho, cầu tài lộc, cúng tế)",
+        "Trực Mãn (Tốt mở kho, cầu tài lộc, cúng lễ)",
         "Trực Bình (Tốt giao dịch, sửa chữa, bàn việc)",
         "Trực Định (Tốt ký kết, nhập học, cầu danh)",
         "Trực Chấp (Tốt xây dựng, lập kế hoạch)",
-        "Trực Phá (Nên nghỉ ngơi, khám chữa bệnh)",
+        "Trực Phá (Tốt dỡ bỏ cũ kỹ, khám chữa bệnh)",
         "Trực Nguy (Nên cẩn trọng khi đi xa)",
         "Trực Thành (Đại cát: Khai trương, cưới hỏi, hợp tác)",
         "Trực Thu (Tốt thu hoạch, tích lũy tài sản)",
-        "Trực Khai (Đại cát: Khởi công, nhậm chức, xuất hành)",
+        "Trực Khai (Đại cát: Khởi công, khai trương, xuất hành)",
         "Trực Bế (Tốt bồi đắp, tu dưỡng, tổng kết)"
     )
 
@@ -93,6 +126,32 @@ object LunarCalendarEngine {
     )
 
     private const val TIME_ZONE = 7.0
+
+    // Live cache populated by OfficialCalendarDataSource when online
+    private val onlineLunarCache = ConcurrentHashMap<String, LunarDate>()
+    private val onlineHolidaysByDateCache = ConcurrentHashMap<String, List<HolidayInfo>>()
+
+    fun registerOnlineLunarDate(solarDay: Int, solarMonth: Int, solarYear: Int, lunarDate: LunarDate) {
+        val key = String.format("%04d-%02d-%02d", solarYear, solarMonth, solarDay)
+        onlineLunarCache[key] = lunarDate
+    }
+
+    fun registerOnlineHolidaysForDate(solarDay: Int, solarMonth: Int, solarYear: Int, holidays: List<HolidayInfo>) {
+        val key = String.format("%04d-%02d-%02d", solarYear, solarMonth, solarDay)
+        onlineHolidaysByDateCache[key] = holidays
+    }
+
+    /**
+     * Reads current date from the phone's clock strictly in Vietnam Timezone (UTC+7 Asia/Ho_Chi_Minh).
+     */
+    fun getDeviceDateInVietnam(): Triple<Int, Int, Int> {
+        val cal = Calendar.getInstance(VIETNAM_TIME_ZONE)
+        return Triple(
+            cal.get(Calendar.DAY_OF_MONTH),
+            cal.get(Calendar.MONTH) + 1,
+            cal.get(Calendar.YEAR)
+        )
+    }
 
     fun jdFromDate(dd: Int, mm: Int, yy: Int): Int {
         val a = (14 - mm) / 12
@@ -167,7 +226,8 @@ object LunarCalendarEngine {
     }
 
     private fun getSolarTermIndex(jdn: Int, timeZone: Double = TIME_ZONE): Int {
-        val t = (jdn - 2451545.5 - timeZone / 24.0) / 36525.0
+        // Evaluate at the end of the solar day in UTC+7 so a solar term transition during the day is reflected
+        val t = (jdn + 0.5 - 2451545.0 - timeZone / 24.0) / 36525.0
         val t2 = t * t
         val dr = Math.PI / 180.0
         val m = 357.52910 + 35999.05030 * t - 0.0001559 * t2 - 0.00000048 * t * t2
@@ -177,7 +237,7 @@ object LunarCalendarEngine {
         var l = l0 + dl
         l *= dr
         l -= Math.PI * 2 * floor(l / (Math.PI * 2))
-        return floor(l / Math.PI * 12).toInt() % 24
+        return (floor(l / Math.PI * 12).toInt() + 24) % 24
     }
 
     private fun getLunarMonth11(yy: Int, timeZone: Double = TIME_ZONE): Int {
@@ -204,7 +264,41 @@ object LunarCalendarEngine {
         return i - 1
     }
 
+    /**
+     * Converts Solar date to Vietnamese Lunar date (UTC+7):
+     * 1. Checks cached official online Lunar date if already fetched
+     * 2. Uses official Unicode CLDR / Android ICU Astronomical Calendar (Asia/Ho_Chi_Minh)
+     * 3. Falls back to astronomical Ho Ngoc Duc UTC+7 algorithm
+     */
     fun solarToLunar(dd: Int, mm: Int, yy: Int): LunarDate {
+        val cacheKey = String.format("%04d-%02d-%02d", yy, mm, dd)
+        onlineLunarCache[cacheKey]?.let { return it }
+
+        // Try Android's built-in official ICU Astronomical Calendar in Vietnam TimeZone (Asia/Ho_Chi_Minh)
+        try {
+            val vnIcuTz = android.icu.util.TimeZone.getTimeZone("Asia/Ho_Chi_Minh")
+            val greg = android.icu.util.GregorianCalendar(vnIcuTz).apply {
+                clear()
+                set(yy, mm - 1, dd, 12, 0, 0)
+            }
+            val chineseCal = android.icu.util.ChineseCalendar(vnIcuTz).apply {
+                timeInMillis = greg.timeInMillis
+            }
+            val lDay = chineseCal.get(android.icu.util.Calendar.DAY_OF_MONTH)
+            val lMonth = chineseCal.get(android.icu.util.Calendar.MONTH) + 1
+            val isLeap = chineseCal.get(android.icu.util.Calendar.IS_LEAP_MONTH) == 1
+            if (lDay in 1..30 && lMonth in 1..12) {
+                val lYear = if (mm <= 2 && lMonth >= 11) yy - 1 else yy
+                return LunarDate(lDay, lMonth, lYear, isLeap)
+            }
+        } catch (_: Throwable) {
+            // Fallback to pure astronomical calculation in JVM unit tests
+        }
+
+        return astronomicalSolarToLunar(dd, mm, yy)
+    }
+
+    fun astronomicalSolarToLunar(dd: Int, mm: Int, yy: Int): LunarDate {
         val dayNumber = jdFromDate(dd, mm, yy)
         val k = floor((dayNumber - 2415021.076998695) / 29.530588853).toInt()
         var monthStart = getNewMoonDay(k + 1)
@@ -275,25 +369,25 @@ object LunarCalendarEngine {
     }
 
     fun getCanChiYear(lunarYear: Int): String {
-        val can = CAN[(lunarYear + 6) % 10]
-        val chi = CHI[(lunarYear + 8) % 12]
+        val can = CAN[((lunarYear + 6) % 10 + 10) % 10]
+        val chi = CHI[((lunarYear + 8) % 12 + 12) % 12]
         return "$can $chi"
     }
 
     fun getCanChiMonth(lunarMonth: Int, lunarYear: Int): String {
-        val canIndex = (lunarYear * 12 + lunarMonth + 3) % 10
-        val chiIndex = (lunarMonth + 1) % 12
+        val canIndex = ((lunarYear * 12 + lunarMonth + 3) % 10 + 10) % 10
+        val chiIndex = ((lunarMonth + 1) % 12 + 12) % 12
         return "${CAN[canIndex]} ${CHI[chiIndex]}"
     }
 
     fun getCanChiDay(jd: Int): String {
-        val can = CAN[(jd + 9) % 10]
-        val chi = CHI[(jd + 1) % 12]
+        val can = CAN[((jd + 9) % 10 + 10) % 10]
+        val chi = CHI[((jd + 1) % 12 + 12) % 12]
         return "$can $chi"
     }
 
     fun getAuspiciousHours(jd: Int): List<String> {
-        val chiOfDay = (jd + 1) % 12
+        val chiOfDay = ((jd + 1) % 12 + 12) % 12
         val pattern = when (chiOfDay % 6) {
             0 -> listOf(0, 1, 4, 5, 7, 10) // Tý, Ngọ
             1 -> listOf(2, 3, 6, 7, 9, 11) // Sửu, Mùi
@@ -305,9 +399,16 @@ object LunarCalendarEngine {
         return pattern.map { CHI_HOURS[it] }
     }
 
-    fun getHolidaysForDate(solarDay: Int, solarMonth: Int, lunarDate: LunarDate): List<HolidayInfo> {
+    fun getHolidaysForDate(solarDay: Int, solarMonth: Int, solarYear: Int, lunarDate: LunarDate): List<HolidayInfo> {
         val list = mutableListOf<HolidayInfo>()
-        // Lunar holidays
+
+        // 1. Official online holidays fetched from Nager.Date / Official API
+        val cacheKey = String.format("%04d-%02d-%02d", solarYear, solarMonth, solarDay)
+        onlineHolidaysByDateCache[cacheKey]?.let { onlineList ->
+            list.addAll(onlineList)
+        }
+
+        // 2. Canonical Vietnamese Lunar holidays
         when ("${lunarDate.day}/${lunarDate.month}") {
             "1/1" -> list.add(HolidayInfo("Mùng 1 Tết Nguyên Đán", "Tết cổ truyền dân tộc Việt Nam", isLunar = true, isMajorHoliday = true))
             "2/1" -> list.add(HolidayInfo("Mùng 2 Tết Nguyên Đán", "Du xuân chúc Tết họ hàng", isLunar = true, isMajorHoliday = true))
@@ -332,27 +433,31 @@ object LunarCalendarEngine {
             list.add(HolidayInfo("Ngày Rằm Tháng ${lunarDate.month}", "Ngày Vọng - Trăng tròn giữa tháng Âm lịch", isLunar = true))
         }
 
-        // Solar holidays
-        when ("$solarDay/$solarMonth") {
-            "1/1" -> list.add(HolidayInfo("Tết Dương Lịch", "Chào đón năm mới Dương lịch", isLunar = false, isMajorHoliday = true))
-            "14/2" -> list.add(HolidayInfo("Lễ Tình Nhân (Valentine)", "Ngày tôn vinh tình yêu đôi lứa", isLunar = false))
-            "27/2" -> list.add(HolidayInfo("Ngày Thầy Thuốc Việt Nam", "Tôn vinh ngành Y tế Việt Nam", isLunar = false))
-            "8/3" -> list.add(HolidayInfo("Quốc Tế Phụ Nữ 8/3", "Tôn vinh phụ nữ toàn cầu", isLunar = false, isMajorHoliday = true))
-            "26/3" -> list.add(HolidayInfo("Ngày Thành Lập Đoàn TNCS", "Kỷ niệm ngày thành lập Đoàn 26/3", isLunar = false))
-            "30/4" -> list.add(HolidayInfo("Ngày Giải Phóng Miền Nam", "Kỷ niệm thống nhất đất nước 30/4", isLunar = false, isMajorHoliday = true))
-            "1/5" -> list.add(HolidayInfo("Quốc Tế Lao Động 1/5", "Ngày lễ người lao động quốc tế", isLunar = false, isMajorHoliday = true))
-            "19/5" -> list.add(HolidayInfo("Ngày Sinh Chủ Tịch Hồ Chí Minh", "Kỷ niệm ngày sinh Bác Hồ 19/5", isLunar = false))
-            "1/6" -> list.add(HolidayInfo("Quốc Tế Thiếu Nhi 1/6", "Ngày hội chăm sóc trẻ em", isLunar = false))
-            "28/6" -> list.add(HolidayInfo("Ngày Gia Đình Việt Nam", "Tôn vinh mái ấm gia đình Việt", isLunar = false))
-            "27/7" -> list.add(HolidayInfo("Ngày Thương Binh Liệt Sĩ", "Uống nước nhớ nguồn, tri ân anh hùng", isLunar = false))
-            "19/8" -> list.add(HolidayInfo("Cách Mạng Tháng Tám", "Kỷ niệm Cách mạng Tháng Tám thành công", isLunar = false))
-            "2/9" -> list.add(HolidayInfo("Quốc Khánh Việt Nam 2/9", "Lễ Quốc Khánh nước CHXHCN Việt Nam", isLunar = false, isMajorHoliday = true))
-            "10/10" -> list.add(HolidayInfo("Giải Phóng Thủ Đô", "Kỷ niệm giải phóng Thủ đô Hà Nội", isLunar = false))
-            "13/10" -> list.add(HolidayInfo("Ngày Doanh Nhân Việt Nam", "Tôn vinh cộng đồng doanh nhân", isLunar = false))
-            "20/10" -> list.add(HolidayInfo("Ngày Phụ Nữ Việt Nam 20/10", "Tôn vinh phụ nữ Việt Nam", isLunar = false, isMajorHoliday = true))
-            "20/11" -> list.add(HolidayInfo("Ngày Nhà Giáo Việt Nam 20/11", "Tôn sư trọng đạo, tri ân thầy cô", isLunar = false, isMajorHoliday = true))
-            "22/12" -> list.add(HolidayInfo("Ngày Thành Lập QĐND Việt Nam", "Kỷ niệm Quân đội Nhân dân Việt Nam", isLunar = false))
-            "24/12" -> list.add(HolidayInfo("Lễ Giáng Sinh (Noel)", "Đêm Giáng Sinh an lành", isLunar = false))
+        // 3. Canonical Vietnamese Solar holidays (avoiding duplicates if online API already provided them)
+        val solarHoliday = when ("$solarDay/$solarMonth") {
+            "1/1" -> HolidayInfo("Tết Dương Lịch", "Chào đón năm mới Dương lịch", isLunar = false, isMajorHoliday = true)
+            "14/2" -> HolidayInfo("Lễ Tình Nhân (Valentine)", "Ngày tôn vinh tình yêu đôi lứa", isLunar = false)
+            "27/2" -> HolidayInfo("Ngày Thầy Thuốc Việt Nam", "Tôn vinh ngành Y tế Việt Nam", isLunar = false)
+            "8/3" -> HolidayInfo("Quốc Tế Phụ Nữ 8/3", "Tôn vinh phụ nữ toàn cầu", isLunar = false, isMajorHoliday = true)
+            "26/3" -> HolidayInfo("Ngày Thành Lập Đoàn TNCS", "Kỷ niệm ngày thành lập Đoàn 26/3", isLunar = false)
+            "30/4" -> HolidayInfo("Ngày Giải Phóng Miền Nam 30/4", "Kỷ niệm thống nhất đất nước 30/4", isLunar = false, isMajorHoliday = true)
+            "1/5" -> HolidayInfo("Quốc Tế Lao Động 1/5", "Ngày lễ người lao động quốc tế", isLunar = false, isMajorHoliday = true)
+            "19/5" -> HolidayInfo("Ngày Sinh Chủ Tịch Hồ Chí Minh", "Kỷ niệm ngày sinh Bác Hồ 19/5", isLunar = false)
+            "1/6" -> HolidayInfo("Quốc Tế Thiếu Nhi 1/6", "Ngày hội chăm sóc trẻ em", isLunar = false)
+            "28/6" -> HolidayInfo("Ngày Gia Đình Việt Nam", "Tôn vinh mái ấm gia đình Việt", isLunar = false)
+            "27/7" -> HolidayInfo("Ngày Thương Binh Liệt Sĩ", "Uống nước nhớ nguồn, tri ân anh hùng", isLunar = false)
+            "19/8" -> HolidayInfo("Cách Mạng Tháng Tám", "Kỷ niệm Cách mạng Tháng Tám thành công", isLunar = false)
+            "2/9" -> HolidayInfo("Quốc Khánh Việt Nam 2/9", "Lễ Quốc Khánh nước CHXHCN Việt Nam", isLunar = false, isMajorHoliday = true)
+            "10/10" -> HolidayInfo("Giải Phóng Thủ Đô", "Kỷ niệm giải phóng Thủ đô Hà Nội", isLunar = false)
+            "13/10" -> HolidayInfo("Ngày Doanh Nhân Việt Nam", "Tôn vinh cộng đồng doanh nhân", isLunar = false)
+            "20/10" -> HolidayInfo("Ngày Phụ Nữ Việt Nam 20/10", "Tôn vinh phụ nữ Việt Nam", isLunar = false, isMajorHoliday = true)
+            "20/11" -> HolidayInfo("Ngày Nhà Giáo Việt Nam 20/11", "Tôn sư trọng đạo, tri ân thầy cô", isLunar = false, isMajorHoliday = true)
+            "22/12" -> HolidayInfo("Ngày Thành Lập QĐND Việt Nam", "Kỷ niệm Quân đội Nhân dân Việt Nam", isLunar = false)
+            "24/12" -> HolidayInfo("Lễ Giáng Sinh (Noel)", "Đêm Giáng Sinh an lành", isLunar = false)
+            else -> null
+        }
+        if (solarHoliday != null && list.none { !it.isLunar }) {
+            list.add(solarHoliday)
         }
         return list
     }
@@ -360,7 +465,7 @@ object LunarCalendarEngine {
     fun getDayDetail(solarDay: Int, solarMonth: Int, solarYear: Int): DayDetailInfo {
         val jd = jdFromDate(solarDay, solarMonth, solarYear)
         val lunar = solarToLunar(solarDay, solarMonth, solarYear)
-        val dayOfWeekIdx = (jd + 1) % 7 // 0 = Sunday, 1 = Monday, ...
+        val dayOfWeekIdx = ((jd + 1) % 7 + 7) % 7 // 0 = Sunday, 1 = Monday, ...
         val dayOfWeekName = when (dayOfWeekIdx) {
             0 -> "Chủ Nhật"
             1 -> "Thứ Hai"
@@ -370,18 +475,29 @@ object LunarCalendarEngine {
             5 -> "Thứ Sáu"
             else -> "Thứ Bảy"
         }
-        val tietKhi = TIET_KHI[getSolarTermIndex(jd)]
-        val isGoodDay = ((jd + lunar.month) % 3 != 1)
-        val qualityLabel = if (isGoodDay) {
-            "Ngày Hoàng Đạo (Cát lợi cho khai trương, xuất hành, cầu phúc)"
-        } else {
-            "Ngày Bình Thường (Nên ưu tiên việc thường nhật, chuẩn bị kế hoạch)"
-        }
 
-        val canIndex = (jd + 9) % 10
-        val chiIndex = (jd + 1) % 12
+        val solarTermIdx = getSolarTermIndex(jd)
+        val tietKhi = TIET_KHI[solarTermIdx]
+
+        val canIndex = ((jd + 9) % 10 + 10) % 10
+        val chiIndex = ((jd + 1) % 12 + 12) % 12
+
+        // Official 12 Sao Hoàng Đạo / Hắc Đạo lookup by Lunar Month and Day Chi
+        val thanhLongStartChi = ((lunar.month - 1) % 6) * 2
+        val saoIndex = ((chiIndex - thanhLongStartChi) % 12 + 12) % 12
+        val saoEntry = THAP_NHI_SAO[saoIndex]
+        val isGoodDay = saoEntry.isHoangDao
+        val qualityLabel = "${saoEntry.name} — ${saoEntry.description}"
+
+        // Official 60 Hoa Giáp Nạp Âm
         val nguHanh = NGU_HANH_NAP_AM[((jd + 49) % 60 + 60) % 60 / 2]
-        val truc = THAP_NHI_TRUC[(chiIndex - lunar.month + 13).mod(12)]
+
+        // Official Thập Nhị Trực by Solar Term Month Branch (Tiết Khí Kiến Chi)
+        // Lập Xuân (index 21) starts month Dần (chi = 2)
+        val tietKhiMonthBranch = (((solarTermIdx - 21 + 24) % 24) / 2 + 2) % 12
+        val trucIndex = ((chiIndex - tietKhiMonthBranch) % 12 + 12) % 12
+        val truc = THAP_NHI_TRUC[trucIndex]
+
         val huongXuatHanh = when (canIndex) {
             0, 5 -> "Hỷ Thần: Đông Bắc • Tài Thần: Đông Nam"
             1, 6 -> "Hỷ Thần: Tây Bắc • Tài Thần: Đông Nam"
@@ -402,6 +518,9 @@ object LunarCalendarEngine {
             listOf("Khởi công lớn", "Đầu tư mạo hiểm", "Tranh cãi bất hòa")
         }
 
+        val cacheKey = String.format("%04d-%02d-%02d", solarYear, solarMonth, solarDay)
+        val hasOnlineData = onlineLunarCache.containsKey(cacheKey) || onlineHolidaysByDateCache.containsKey(cacheKey)
+
         return DayDetailInfo(
             solarDay = solarDay,
             solarMonth = solarMonth,
@@ -413,14 +532,20 @@ object LunarCalendarEngine {
             canChiDay = getCanChiDay(jd),
             tietKhi = tietKhi,
             zodiacHours = getAuspiciousHours(jd),
-            holidays = getHolidaysForDate(solarDay, solarMonth, lunar),
+            holidays = getHolidaysForDate(solarDay, solarMonth, solarYear, lunar),
             isGoodDay = isGoodDay,
             dayQualityLabel = qualityLabel,
+            saoHoangDao = saoEntry.name,
             nguHanhNgay = nguHanh,
             trucNgay = truc,
             huongXuatHanh = huongXuatHanh,
             viecNenLam = viecNenLam,
-            viecKiengKy = viecKiengKy
+            viecKiengKy = viecKiengKy,
+            dataSourceLabel = if (hasOnlineData) {
+                "Dữ liệu trực tuyến chính thức (UTC+7)"
+            } else {
+                "Lịch thiên văn chuẩn hệ thống (UTC+7)"
+            }
         )
     }
 

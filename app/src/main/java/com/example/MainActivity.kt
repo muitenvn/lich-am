@@ -219,6 +219,10 @@ fun LichVanNienMainScaffold(
     val selectedDay by viewModel.selectedDay.collectAsStateWithLifecycle()
     val selectedMonth by viewModel.selectedMonth.collectAsStateWithLifecycle()
     val selectedYear by viewModel.selectedYear.collectAsStateWithLifecycle()
+    val todayTriple by viewModel.todayTriple.collectAsStateWithLifecycle()
+    val calendarSyncStatus by viewModel.calendarSyncStatus.collectAsStateWithLifecycle()
+    val isSyncingOfficialDate by viewModel.isSyncingOfficialDate.collectAsStateWithLifecycle()
+    val dataVersion by viewModel.dataVersion.collectAsStateWithLifecycle()
     val eventsState by viewModel.eventsState.collectAsStateWithLifecycle()
     val cloudPreferenceState by viewModel.cloudPreferenceState.collectAsStateWithLifecycle()
     val sharedWithMeState by viewModel.sharedWithMeState.collectAsStateWithLifecycle()
@@ -226,6 +230,16 @@ fun LichVanNienMainScaffold(
     val bannerMessage by viewModel.statusBannerMessage.collectAsStateWithLifecycle()
 
     var showSignInDialog by rememberSaveable { mutableStateOf(false) }
+
+    // Fetch current Vietnam date & official calendar data from online servers when connected,
+    // or fall back to the phone's clock (Asia/Ho_Chi_Minh) when offline.
+    LaunchedEffect(Unit) {
+        viewModel.syncWithOfficialSource(
+            context = context,
+            updateSelectedDate = true,
+            showToastBanner = false
+        )
+    }
 
     // Sync cloud preferences to local DataStore when loaded
     LaunchedEffect(cloudPreferenceState) {
@@ -426,10 +440,21 @@ fun LichVanNienMainScaffold(
                         selectedDay = selectedDay,
                         selectedMonth = selectedMonth,
                         selectedYear = selectedYear,
+                        todayTriple = todayTriple,
+                        syncStatus = calendarSyncStatus,
+                        isSyncingOfficialDate = isSyncingOfficialDate,
+                        dataVersion = dataVersion,
                         events = eventsList,
-                        onSelectDate = { d, m, y -> viewModel.selectSolarDate(d, m, y) },
-                        onNavigateMonth = { delta -> viewModel.navigateMonth(delta) },
-                        onJumpToToday = { viewModel.jumpToToday() },
+                        onSelectDate = { d, m, y -> viewModel.selectSolarDate(d, m, y, context) },
+                        onNavigateMonth = { delta -> viewModel.navigateMonth(delta, context) },
+                        onJumpToToday = { viewModel.jumpToToday(context) },
+                        onSyncOfficialDate = {
+                            viewModel.syncWithOfficialSource(
+                                context = context,
+                                updateSelectedDate = false,
+                                showToastBanner = true
+                            )
+                        },
                         onOpenQuickConverter = { currentTab = 1 },
                         onOpenAddEventDialog = {
                             quickAddDialogSpec = Quadruple(selectedDay, selectedMonth, selectedYear, "")
@@ -442,7 +467,7 @@ fun LichVanNienMainScaffold(
                         initialMonth = selectedMonth,
                         initialYear = selectedYear,
                         onJumpToDateInCalendar = { d, m, y ->
-                            viewModel.selectSolarDate(d, m, y)
+                            viewModel.selectSolarDate(d, m, y, context)
                             currentTab = 0
                         },
                         onCreateEventForDate = { d, m, y, defaultTitle ->

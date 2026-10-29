@@ -31,10 +31,7 @@ class LunarCalendarAppWidgetProvider : AppWidgetProvider() {
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int
         ) {
-            val cal = Calendar.getInstance()
-            val day = cal.get(Calendar.DAY_OF_MONTH)
-            val month = cal.get(Calendar.MONTH) + 1
-            val year = cal.get(Calendar.YEAR)
+            val (day, month, year) = LunarCalendarEngine.getDeviceDateInVietnam()
 
             val detail = LunarCalendarEngine.getDayDetail(day, month, year)
             val views = RemoteViews(context.packageName, R.layout.widget_lunar_calendar)
