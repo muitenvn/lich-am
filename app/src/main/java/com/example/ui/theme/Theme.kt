@@ -26,15 +26,22 @@ fun MyApplicationTheme(
             "royal_lotus" -> Triple(LotusPrimaryDark, LotusSecondaryDark, LotusTertiaryDark)
             else -> Triple(CrimsonPrimaryDark, CrimsonSecondaryDark, CrimsonTertiaryDark)
         }
+        val primaryContainerColor = when (accentPalette) {
+            "jade_bamboo" -> Color(0xFF172D22)
+            "indigo_moon" -> Color(0xFF19223B)
+            "royal_lotus" -> Color(0xFF311828)
+            else -> Color(0xFF33181E)
+        }
+        val secondaryContainerColor = Color(0xFF2B2415)
         darkColorScheme(
             primary = primary,
             onPrimary = Color(0xFF1A0E10),
-            primaryContainer = primary.copy(alpha = 0.22f),
-            onPrimaryContainer = primary,
+            primaryContainer = primaryContainerColor,
+            onPrimaryContainer = Color(0xFFFFECEE),
             secondary = secondary,
             onSecondary = Color(0xFF1C1708),
-            secondaryContainer = secondary.copy(alpha = 0.2f),
-            onSecondaryContainer = secondary,
+            secondaryContainer = secondaryContainerColor,
+            onSecondaryContainer = Color(0xFFFFE599),
             tertiary = tertiary,
             background = OledDarkBackground,
             onBackground = Color(0xFFF5F2EB),
@@ -50,15 +57,22 @@ fun MyApplicationTheme(
             "royal_lotus" -> Triple(LotusPrimaryLight, LotusSecondaryLight, LotusTertiaryLight)
             else -> Triple(CrimsonPrimaryLight, CrimsonSecondaryLight, CrimsonTertiaryLight)
         }
+        val primaryContainerColor = when (accentPalette) {
+            "jade_bamboo" -> Color(0xFFE1F3E8)
+            "indigo_moon" -> Color(0xFFE3E8FA)
+            "royal_lotus" -> Color(0xFFFCE4EC)
+            else -> Color(0xFFFDE8E8)
+        }
+        val secondaryContainerColor = Color(0xFFFFF4D6)
         lightColorScheme(
             primary = primary,
             onPrimary = Color.White,
-            primaryContainer = primary.copy(alpha = 0.14f),
+            primaryContainer = primaryContainerColor,
             onPrimaryContainer = primary,
             secondary = secondary,
             onSecondary = Color.White,
-            secondaryContainer = secondary.copy(alpha = 0.15f),
-            onSecondaryContainer = secondary,
+            secondaryContainer = secondaryContainerColor,
+            onSecondaryContainer = Color(0xFF5D4200),
             tertiary = tertiary,
             background = RicePaperBackground,
             onBackground = Color(0xFF1E1B18),

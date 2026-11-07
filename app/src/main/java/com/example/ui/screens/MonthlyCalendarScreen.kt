@@ -12,10 +12,10 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,25 +31,34 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -107,6 +116,8 @@ fun MonthlyCalendarScreen(
         LunarCalendarEngine.getAllUpcomingHolidays(selectedDay, selectedMonth, selectedYear, count = 6)
     }
 
+    var showMonthYearPicker by remember { mutableStateOf(false) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -114,22 +125,15 @@ fun MonthlyCalendarScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 0. Official Online / Offline Data Source Status Banner
-        item {
-            OfficialDataSourceStatusCard(
-                syncStatus = syncStatus,
-                todayTriple = todayTriple,
-                dayDetail = dayDetail,
-                isSyncing = isSyncingOfficialDate,
-                onSyncOfficialDate = onSyncOfficialDate
-            )
-        }
-
-        // 1. Hero Dual Lunar-Solar Card
+        // 1. Hero Dual Lunar-Solar Card with integrated Online/Offline Official Source Bar
         item {
             HeroDayBannerCard(
                 dayDetail = dayDetail,
+                syncStatus = syncStatus,
+                todayTriple = todayTriple,
+                isSyncing = isSyncingOfficialDate,
                 onJumpToToday = onJumpToToday,
+                onSyncOfficialDate = onSyncOfficialDate,
                 onOpenQuickConverter = onOpenQuickConverter
             )
         }
@@ -144,7 +148,8 @@ fun MonthlyCalendarScreen(
                 dataVersion = dataVersion,
                 events = events,
                 onSelectDate = onSelectDate,
-                onNavigateMonth = onNavigateMonth
+                onNavigateMonth = onNavigateMonth,
+                onOpenMonthYearPicker = { showMonthYearPicker = true }
             )
         }
 
@@ -174,6 +179,7 @@ fun MonthlyCalendarScreen(
                 Text(
                     text = "Sự kiện cá nhân trong ngày (${dayEvents.size})",
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
@@ -182,7 +188,7 @@ fun MonthlyCalendarScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 ) {
                     Row(
@@ -274,9 +280,9 @@ fun MonthlyCalendarScreen(
                     .clickable {
                         onSelectDate(info.solarDay, info.solarMonth, info.solarYear)
                     },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
                 Row(
@@ -288,7 +294,7 @@ fun MonthlyCalendarScreen(
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = if (holiday.isLunar) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.size(52.dp)
+                        modifier = Modifier.size(54.dp)
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -338,102 +344,74 @@ fun MonthlyCalendarScreen(
             }
         }
     }
-}
 
-@Composable
-private fun OfficialDataSourceStatusCard(
-    syncStatus: CalendarSyncStatus?,
-    todayTriple: Triple<Int, Int, Int>,
-    dayDetail: DayDetailInfo,
-    isSyncing: Boolean,
-    onSyncOfficialDate: () -> Unit
-) {
-    val isOnline = syncStatus?.isOnline == true
-    val modeTitle = when {
-        isSyncing -> "⏳ Đang truy vấn dữ liệu lịch chính thức trực tuyến..."
-        isOnline -> "🌐 Trực tuyến: Dữ liệu Lịch Chính Thức"
-        else -> "📱 Ngoại tuyến: Dựa vào đồng hồ điện thoại (UTC+7)"
-    }
-    val sourceText = syncStatus?.sourceName ?: dayDetail.dataSourceLabel
-    val todayFormatted = String.format("%02d/%02d/%04d", todayTriple.first, todayTriple.second, todayTriple.third)
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("official_data_source_card"),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOnline) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-            } else {
-                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+    if (showMonthYearPicker) {
+        MonthYearQuickPickerDialog(
+            initialMonth = selectedMonth,
+            initialYear = selectedYear,
+            onDismiss = { showMonthYearPicker = false },
+            onConfirm = { newMonth, newYear ->
+                showMonthYearPicker = false
+                onSelectDate(selectedDay, newMonth, newYear)
             }
         )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = modeTitle,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Hôm nay (VN): $todayFormatted • Nguồn: $sourceText",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            FilledTonalButton(
-                onClick = onSyncOfficialDate,
-                enabled = !isSyncing,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                modifier = Modifier.testTag("sync_official_source_btn")
-            ) {
-                Text(
-                    text = if (isSyncing) "Đang tải..." else "Tra trực tuyến",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
     }
 }
 
 @Composable
 private fun HeroDayBannerCard(
     dayDetail: DayDetailInfo,
+    syncStatus: CalendarSyncStatus?,
+    todayTriple: Triple<Int, Int, Int>,
+    isSyncing: Boolean,
     onJumpToToday: () -> Unit,
+    onSyncOfficialDate: () -> Unit,
     onOpenQuickConverter: () -> Unit
 ) {
+    val isOnline = syncStatus?.isOnline == true
+    val todayFormatted = String.format("%02d/%02d/%04d", todayTriple.first, todayTriple.second, todayTriple.third)
+    val modeBadgeText = when {
+        isSyncing -> "⏳ Đang đồng bộ trực tuyến..."
+        isOnline -> "🌐 Trực tuyến • Hôm nay: $todayFormatted"
+        else -> "📱 Ngoại tuyến (Đồng hồ máy) • $todayFormatted"
+    }
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("official_data_source_card"),
         shape = RoundedCornerShape(26.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
+            // Background art fills whatever height the content requires
             Image(
                 painter = painterResource(id = R.drawable.img_lunar_hero),
                 contentDescription = "Bầu trời đêm Âm lịch",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(215.dp),
+                modifier = Modifier.matchParentSize(),
                 contentScale = ContentScale.Crop
             )
+            // Rich protective dark-crimson & midnight scrim so text is 100% legible
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xCC3B0D14),
+                                Color(0xBB161224),
+                                Color(0xE60D111C)
+                            )
+                        )
+                    )
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(18.dp)
             ) {
+                // Top Row: Date header pill & Action chips
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -441,46 +419,51 @@ private fun HeroDayBannerCard(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = Color.Black.copy(alpha = 0.35f)
+                        color = Color.Black.copy(alpha = 0.45f),
+                        modifier = Modifier.weight(1f, fill = false)
                     ) {
                         Text(
-                            text = "${dayDetail.dayOfWeekName.uppercase()} • THÁNG ${dayDetail.solarMonth} NĂM ${dayDetail.solarYear}",
+                            text = "${dayDetail.dayOfWeekName.uppercase()} • THÁNG ${dayDetail.solarMonth}, ${dayDetail.solarYear}",
                             style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
                             color = Color(0xFFFFD966),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         AssistChip(
                             onClick = onJumpToToday,
-                            label = { Text("Hôm nay", color = Color.White) },
+                            label = { Text("Hôm nay", color = Color.White, style = MaterialTheme.typography.labelMedium) },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.CalendarToday,
                                     contentDescription = null,
                                     tint = Color(0xFFFFD966),
-                                    modifier = Modifier.size(15.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             },
                             colors = AssistChipDefaults.assistChipColors(
-                                containerColor = Color.Black.copy(alpha = 0.4f)
+                                containerColor = Color.Black.copy(alpha = 0.45f)
                             ),
                             border = null,
                             modifier = Modifier.testTag("jump_today_chip")
                         )
                         AssistChip(
                             onClick = onOpenQuickConverter,
-                            label = { Text("Đổi ngày", color = Color.White) },
+                            label = { Text("Đổi ngày", color = Color.White, style = MaterialTheme.typography.labelMedium) },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.SwapHoriz,
                                     contentDescription = null,
                                     tint = Color(0xFFFFD966),
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                             },
                             colors = AssistChipDefaults.assistChipColors(
-                                containerColor = Color.Black.copy(alpha = 0.4f)
+                                containerColor = Color.Black.copy(alpha = 0.45f)
                             ),
                             border = null,
                             modifier = Modifier.testTag("quick_convert_chip")
@@ -488,66 +471,139 @@ private fun HeroDayBannerCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
+                // Main Dual Display: Solar Left + Lunar Right Card
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Solar Big Number
-                    Column {
+                    // Solar Big Number Column
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "DƯƠNG LỊCH",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.78f)
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFE082)
                         )
                         Text(
                             text = dayDetail.solarDay.toString().padStart(2, '0'),
-                            style = MaterialTheme.typography.displayLarge.copy(fontSize = 54.sp),
+                            style = MaterialTheme.typography.displayLarge.copy(
+                                fontSize = 54.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            ),
                             color = Color.White
                         )
                         if (dayDetail.holidays.isNotEmpty()) {
                             Text(
                                 text = "★ ${dayDetail.holidays.first().title}",
                                 style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFFAB91),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         } else {
                             Text(
-                                text = "Tiết ${dayDetail.tietKhi}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.9f)
+                                text = "✦ Tiết ${dayDetail.tietKhi} • ${dayDetail.saoHoangDao}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = 0.92f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
 
-                    // Lunar Right Column
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    // Lunar Right Glassmorphic Card
                     Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = Color.Black.copy(alpha = 0.45f)
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.Black.copy(alpha = 0.52f),
+                        modifier = Modifier.border(
+                            width = 1.dp,
+                            color = Color(0x66FFD966),
+                            shape = RoundedCornerShape(20.dp)
+                        )
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalAlignment = Alignment.End
                         ) {
                             val leapLabel = if (dayDetail.lunarDate.isLeapMonth) " (Nhuận)" else ""
                             Text(
-                                text = "ÂM LỊCH$leapLabel",
+                                text = "🌙 ÂM LỊCH$leapLabel",
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFFD966)
                             )
                             Text(
                                 text = "${dayDetail.lunarDate.day.toString().padStart(2, '0')} / ${dayDetail.lunarDate.month.toString().padStart(2, '0')}",
                                 style = MaterialTheme.typography.headlineLarge,
-                                color = Color(0xFFFFD966)
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
                             )
                             Text(
-                                text = "Ngày ${dayDetail.canChiDay} • Năm ${dayDetail.canChiYear}",
+                                text = "Ngày ${dayDetail.canChiDay}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFFFE082)
+                            )
+                            Text(
+                                text = "Tháng ${dayDetail.canChiMonth} • Năm ${dayDetail.canChiYear}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color.White
+                                color = Color.White.copy(alpha = 0.85f)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Bottom Data Source Status Strip inside Hero Card
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color.Black.copy(alpha = 0.42f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = modeBadgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFE8EAF6),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0x33FFD966))
+                                .clickable(enabled = !isSyncing) { onSyncOfficialDate() }
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .testTag("sync_official_source_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Tra trực tuyến",
+                                tint = Color(0xFFFFD966),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isSyncing) "Đang tải..." else "Tra trực tuyến",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFFD966)
                             )
                         }
                     }
@@ -566,7 +622,8 @@ private fun MonthCalendarGridCard(
     dataVersion: Int,
     events: List<CalendarEvent>,
     onSelectDate: (Int, Int, Int) -> Unit,
-    onNavigateMonth: (Int) -> Unit
+    onNavigateMonth: (Int) -> Unit,
+    onOpenMonthYearPicker: () -> Unit
 ) {
     val todayDay = todayTriple.first
     val todayMonth = todayTriple.second
@@ -575,7 +632,7 @@ private fun MonthCalendarGridCard(
     val daysInMonth = LunarCalendarEngine.getDaysInSolarMonth(selectedMonth, selectedYear)
     // Monday-first grid offset (0 = T2, 6 = CN)
     val firstDayJd = LunarCalendarEngine.jdFromDate(1, selectedMonth, selectedYear)
-    val sundayBasedDow = (firstDayJd + 1) % 7 // 0 = Sun, 1 = Mon ... 6 = Sat
+    val sundayBasedDow = ((firstDayJd + 1) % 7 + 7) % 7 // 0 = Sun, 1 = Mon ... 6 = Sat
     val leadingEmptyCells = if (sundayBasedDow == 0) 6 else sundayBasedDow - 1
 
     Card(
@@ -601,9 +658,16 @@ private fun MonthCalendarGridCard(
                     )
                 }
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onOpenMonthYearPicker() }
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .testTag("open_month_year_picker_btn")
+                ) {
                     Text(
-                        text = "Tháng $selectedMonth, $selectedYear",
+                        text = "Tháng $selectedMonth, $selectedYear ▾",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -639,7 +703,12 @@ private fun MonthCalendarGridCard(
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.labelLarge,
-                        color = if (index == 6) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.Bold,
+                        color = when (index) {
+                            6 -> MaterialTheme.colorScheme.primary
+                            5 -> MaterialTheme.colorScheme.secondary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
             }
@@ -652,17 +721,23 @@ private fun MonthCalendarGridCard(
 
             for (row in 0 until rows) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     for (col in 0 until 7) {
                         val cellIndex = row * 7 + col
                         val dayNum = cellIndex - leadingEmptyCells + 1
                         if (dayNum in 1..daysInMonth) {
-                            val lunar = LunarCalendarEngine.solarToLunar(dayNum, selectedMonth, selectedYear)
+                            val cellDetail = remember(dayNum, selectedMonth, selectedYear, dataVersion) {
+                                LunarCalendarEngine.getDayDetail(dayNum, selectedMonth, selectedYear)
+                            }
+                            val lunar = cellDetail.lunarDate
                             val isSelected = dayNum == selectedDay
                             val isToday = dayNum == todayDay && selectedMonth == todayMonth && selectedYear == todayYear
                             val isMung1OrRam = lunar.day == 1 || lunar.day == 15
+                            val isHoangDao = cellDetail.isGoodDay
                             val hasUserEvent = events.any {
                                 (it.solarDay.toInt() == dayNum && it.solarMonth.toInt() == selectedMonth) ||
                                         (it.isLunarRecurring && it.lunarDay.toInt() == lunar.day && it.lunarMonth.toInt() == lunar.month)
@@ -671,8 +746,7 @@ private fun MonthCalendarGridCard(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .aspectRatio(0.92f)
-                                    .padding(1.dp)
+                                    .heightIn(min = 50.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
                                         when {
@@ -684,7 +758,7 @@ private fun MonthCalendarGridCard(
                                     .then(
                                         if (isToday && !isSelected) {
                                             Modifier.border(
-                                                1.dp,
+                                                1.5.dp,
                                                 MaterialTheme.colorScheme.primary,
                                                 RoundedCornerShape(12.dp)
                                             )
@@ -693,6 +767,7 @@ private fun MonthCalendarGridCard(
                                     .clickable {
                                         onSelectDate(dayNum, selectedMonth, selectedYear)
                                     }
+                                    .padding(vertical = 4.dp)
                                     .testTag("calendar_day_$dayNum"),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -707,31 +782,49 @@ private fun MonthCalendarGridCard(
                                         color = when {
                                             isSelected -> MaterialTheme.colorScheme.onPrimary
                                             col == 6 -> MaterialTheme.colorScheme.primary
+                                            col == 5 -> MaterialTheme.colorScheme.secondary
                                             else -> MaterialTheme.colorScheme.onSurface
                                         }
                                     )
-                                    val lunarLabel = if (lunar.day == 1) "${lunar.day}/${lunar.month}" else lunar.day.toString()
+                                    val lunarLabel = if (lunar.day == 1 || dayNum == 1) "${lunar.day}/${lunar.month}" else lunar.day.toString()
                                     Text(
                                         text = lunarLabel,
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                         fontWeight = if (isMung1OrRam) FontWeight.Bold else FontWeight.Normal,
                                         color = when {
-                                            isSelected -> MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                                            isSelected -> MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.92f)
                                             isMung1OrRam -> MaterialTheme.colorScheme.secondary
                                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                                         }
                                     )
-                                    if (hasUserEvent) {
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .size(5.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    if (isSelected) MaterialTheme.colorScheme.onPrimary
-                                                    else MaterialTheme.colorScheme.secondary
-                                                )
-                                        )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.height(5.dp)
+                                    ) {
+                                        if (isHoangDao) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(4.5.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                                        else Color(0xFFFFB300)
+                                                    )
+                                            )
+                                        }
+                                        if (hasUserEvent || cellDetail.holidays.any { it.isMajorHoliday }) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(4.5.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                                        else MaterialTheme.colorScheme.primary
+                                                    )
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -741,8 +834,121 @@ private fun MonthCalendarGridCard(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Legend Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFFB300))
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "Ngày Hoàng Đạo",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "Lễ Tết / Sự kiện",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = "Mùng 1/Rằm: Màu vàng",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MonthYearQuickPickerDialog(
+    initialMonth: Int,
+    initialYear: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int, Int) -> Unit
+) {
+    var pickedMonth by remember { mutableIntStateOf(initialMonth) }
+    var pickedYear by remember { mutableIntStateOf(initialYear) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Chọn Nhanh Tháng & Năm",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { pickedYear = (pickedYear - 1).coerceAtLeast(1900) }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Năm trước")
+                    }
+                    Text(
+                        text = "Năm $pickedYear (${LunarCalendarEngine.getCanChiYear(pickedYear)})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    IconButton(onClick = { pickedYear = (pickedYear + 1).coerceAtMost(2100) }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Năm sau")
+                    }
+                }
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    for (m in 1..12) {
+                        FilterChip(
+                            selected = pickedMonth == m,
+                            onClick = { pickedMonth = m },
+                            label = { Text("Tháng $m") }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(pickedMonth, pickedYear) }) {
+                Text("Xem lịch")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Đóng")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -756,7 +962,7 @@ private fun SelectedDayInsightCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
@@ -776,6 +982,7 @@ private fun SelectedDayInsightCard(
                     Text(
                         text = dayDetail.dayQualityLabel,
                         style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -793,7 +1000,7 @@ private fun SelectedDayInsightCard(
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                    color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(

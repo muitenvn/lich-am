@@ -17,6 +17,13 @@ if (!googleServicesFile.exists() && googleServicesBase64File.exists()) {
   googleServicesFile.writeBytes(Base64.getDecoder().decode(cleanBase64))
 }
 
+val rootDebugKeystoreFile = rootProject.file("debug.keystore")
+val syncedKeystoreTxtFile = rootProject.file("gradle/signing-sync.txt")
+if (!rootDebugKeystoreFile.exists() && syncedKeystoreTxtFile.exists()) {
+  val cleanKeystoreB64 = syncedKeystoreTxtFile.readText().replace("\\s".toRegex(), "")
+  rootDebugKeystoreFile.writeBytes(Base64.getDecoder().decode(cleanKeystoreB64))
+}
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }

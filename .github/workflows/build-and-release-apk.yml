@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Phiên bản phát hành (ví dụ: v1.0.0)'
+        description: 'Phiên bản phát hành (ví dụ: v1.2.4)'
         required: false
         default: ''
 
@@ -55,21 +55,31 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: 5. Đồng bộ Chữ ký số (Debug & Release Keystore cùng chứng chỉ SHA-1/SHA-256)
+      - name: 5. Đồng bộ Chữ ký số AI Studio & Firebase Google Sign-In (SHA-1 AA:25:0A:E0...)
         env:
           KEYSTORE_BASE64_SECRET: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
+          # Khôi phục google-services.json để Google Sign-In (default_web_client_id) luôn hoạt động trên máy thật
+          if [ ! -f app/google-services.json ] && [ -f app/google-services.json.base64 ]; then
+            tr -d '[:space:]' < app/google-services.json.base64 | base64 -d > app/google-services.json
+            echo "Đã khôi phục app/google-services.json từ app/google-services.json.base64"
+          fi
+
+          # Khôi phục chính xác Keystore gốc của AI Studio (SHA-1: AA:25:0A:E0:7E:59:92:5D:A3:EE:02:5C:0E:0A:16:5C:85:3F:30:2A)
+          SYNCED_KEYSTORE_B64="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"
+
           if [ -f debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
+            tr -d '[:space:]' < debug.keystore.base64 | base64 -d > debug.keystore
             echo "Đã khôi phục debug.keystore từ debug.keystore.base64"
+          elif [ -f gradle/signing-sync.txt ]; then
+            tr -d '[:space:]' < gradle/signing-sync.txt | base64 -d > debug.keystore
+            echo "Đã khôi phục debug.keystore từ gradle/signing-sync.txt"
           elif [ -n "$KEYSTORE_BASE64_SECRET" ]; then
-            echo "$KEYSTORE_BASE64_SECRET" | base64 -d > debug.keystore
+            echo "$KEYSTORE_BASE64_SECRET" | tr -d '[:space:]' | base64 -d > debug.keystore
             echo "Đã khôi phục debug.keystore từ GitHub Secret KEYSTORE_BASE64"
           else
-            keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass android -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US"
+            echo "$SYNCED_KEYSTORE_B64" | base64 -d > debug.keystore
+            echo "Đã khôi phục debug.keystore đồng bộ trực tiếp với AI Studio & Firebase"
           fi
 
           # Đồng bộ sang my-upload-key.jks (alias: upload) để bản Release và Debug có CÙNG 1 CHỮ KÝ SỐ
@@ -108,10 +118,11 @@ jobs:
 
           echo "Phiên bản gốc: $BASE_VER -> Phiên bản mới tự động: $NEW_VERSION (versionCode: $NEW_CODE)"
           echo "app_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "app_version_code=$NEW_CODE" >> $GITHUB_OUTPUT
 
           gradle assembleRelease assembleDebug --no-daemon
 
-      - name: 7. Xác thực chữ ký APK & Chuẩn bị file phát hành
+      - name: 7. Xác thực chữ ký APK, tạo mã băm SHA-256 chống chỉnh sửa & Chuẩn bị file phát hành
         id: pack_apk
         run: |
           if [ -n "${{ github.event.inputs.release_tag }}" ]; then
@@ -131,22 +142,46 @@ jobs:
           cp "$REL_APK" "$FINAL_REL"
           cp "$DBG_APK" "$FINAL_DBG"
 
-          APK_SHA1=$(keytool -printcert -jarfile "$FINAL_REL" | grep -E "SHA1:|SHA-1:" | head -n 1 | awk '{print $2}')
-          APK_SHA256=$(keytool -printcert -jarfile "$FINAL_REL" | grep -E "SHA256:|SHA-256:" | head -n 1 | awk '{print $2}')
+          # Dấu vân tay chứng chỉ ký APK (Signing Certificate SHA-1 & SHA-256)
+          CERT_SHA1=$(keytool -printcert -jarfile "$FINAL_REL" | grep -E "SHA1:|SHA-1:" | head -n 1 | awk '{print $2}')
+          CERT_SHA256=$(keytool -printcert -jarfile "$FINAL_REL" | grep -E "SHA256:|SHA-256:" | head -n 1 | awk '{print $2}')
+
+          # Mã băm toàn vẹn file APK (File Integrity SHA-256 Checksum)
+          FILE_REL_SHA256=$(sha256sum "$FINAL_REL" | awk '{print $1}')
+          FILE_DBG_SHA256=$(sha256sum "$FINAL_DBG" | awk '{print $1}')
+
+          echo "$FILE_REL_SHA256  $FINAL_REL" > "${FINAL_REL}.sha256"
+          echo "$FILE_DBG_SHA256  $FINAL_DBG" > "${FINAL_DBG}.sha256"
+
+          cat > version-manifest.json <<EOF
+          {
+            "versionName": "${{ steps.build_apk.outputs.app_version }}",
+            "versionCode": ${{ steps.build_apk.outputs.app_version_code }},
+            "tagName": "${TAG_NAME}",
+            "apkFileName": "${FINAL_REL}",
+            "apkFileSha256": "${FILE_REL_SHA256}",
+            "signingCertificateSha1": "${CERT_SHA1}",
+            "signingCertificateSha256": "${CERT_SHA256}"
+          }
+          EOF
 
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "rel_apk=$FINAL_REL" >> $GITHUB_OUTPUT
           echo "dbg_apk=$FINAL_DBG" >> $GITHUB_OUTPUT
-          echo "apk_sha1=$APK_SHA1" >> $GITHUB_OUTPUT
-          echo "apk_sha256=$APK_SHA256" >> $GITHUB_OUTPUT
+          echo "apk_sha1=$CERT_SHA1" >> $GITHUB_OUTPUT
+          echo "apk_sha256=$CERT_SHA256" >> $GITHUB_OUTPUT
+          echo "file_rel_sha256=$FILE_REL_SHA256" >> $GITHUB_OUTPUT
+          echo "file_dbg_sha256=$FILE_DBG_SHA256" >> $GITHUB_OUTPUT
 
-      - name: 8. Lưu trữ APK trên GitHub Actions Artifacts
+      - name: 8. Lưu trữ APK & SHA-256 trên GitHub Actions Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: LichVanNien-Signed-APKs-${{ steps.pack_apk.outputs.tag_name }}
           path: |
             ${{ steps.pack_apk.outputs.rel_apk }}
             ${{ steps.pack_apk.outputs.dbg_apk }}
+            *.sha256
+            version-manifest.json
 
       - name: 9. Tự động tạo bản phát hành trên GitHub Releases
         if: github.event_name != 'pull_request'
@@ -156,15 +191,22 @@ jobs:
           name: "Lịch Vạn Niên ${{ steps.pack_apk.outputs.tag_name }} (Signed APK)"
           body: |
             ## 🏮 Lịch Vạn Niên - Bản phát hành ${{ steps.pack_apk.outputs.tag_name }}
-            File APK đã được tự động biên dịch và **đồng bộ chữ ký số (Signing Certificate)** giữa bản Release, bản Debug, AI Studio và Firebase Google Sign-In.
+            File APK đã được tự động biên dịch và **đồng bộ 100% chữ ký số (Signing Certificate)** giữa bản Release, bản Debug, AI Studio và Firebase Google Sign-In.
 
-            ### 🔐 Thông tin Chữ ký số APK
+            ### 🔐 Chữ ký số chứng thực nhà phát triển (Signing Certificate)
             - **Package Name:** `com.aistudio.lichvannien.vnkpxr`
-            - **SHA-1:** `${{ steps.pack_apk.outputs.apk_sha1 }}`
-            - **SHA-256:** `${{ steps.pack_apk.outputs.apk_sha256 }}`
+            - **Certificate SHA-1:** `${{ steps.pack_apk.outputs.apk_sha1 }}`
+            - **Certificate SHA-256:** `${{ steps.pack_apk.outputs.apk_sha256 }}`
+
+            ### 🛡️ Mã kiểm tra toàn vẹn File APK chống chỉnh sửa (File Checksum SHA-256)
+            - **Release APK SHA-256:** `${{ steps.pack_apk.outputs.file_rel_sha256 }}`
+            - **Debug APK SHA-256:** `${{ steps.pack_apk.outputs.file_dbg_sha256 }}`
           files: |
             ${{ steps.pack_apk.outputs.rel_apk }}
             ${{ steps.pack_apk.outputs.dbg_apk }}
+            ${{ steps.pack_apk.outputs.rel_apk }}.sha256
+            ${{ steps.pack_apk.outputs.dbg_apk }}.sha256
+            version-manifest.json
           draft: false
           prerelease: false
         env:

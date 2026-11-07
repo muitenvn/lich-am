@@ -374,6 +374,7 @@ fun QuickConverterScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EventsAndRemindersScreen(
     eventsState: UiState<List<CalendarEvent>>,
@@ -439,7 +440,7 @@ fun EventsAndRemindersScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 ) {
                     Row(
@@ -528,11 +529,12 @@ fun EventsAndRemindersScreen(
                 "work" to "Công Việc",
                 "personal" to "Cá Nhân"
             )
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                filters.take(4).forEach { (key, label) ->
+                filters.forEach { (key, label) ->
                     FilterChip(
                         selected = selectedCategoryFilter == key,
                         onClick = { selectedCategoryFilter = key },
@@ -548,7 +550,7 @@ fun EventsAndRemindersScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
                     Column(
@@ -637,16 +639,37 @@ private fun EventItemCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Text(
-                            text = if (event.isLunarRecurring) "Lặp lại hàng năm theo Âm Lịch" else "Theo Dương Lịch",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                    val categoryLabel = when (event.category) {
+                        "holiday" -> "Ngày Lễ"
+                        "ancestral" -> "Giỗ Chạp"
+                        "anniversary" -> "Kỷ Niệm"
+                        "work" -> "Công Việc"
+                        else -> "Cá Nhân"
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = categoryLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = if (event.isLunarRecurring) "Lặp lại hàng năm theo Âm Lịch" else "Theo Dương Lịch",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
@@ -712,6 +735,7 @@ private fun EventItemCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CreateEventDialog(
     initialSolarDay: Int,
@@ -729,10 +753,19 @@ fun CreateEventDialog(
     var isLunarRecurring by remember { mutableStateOf(true) }
     var category by remember { mutableStateOf("ancestral") }
 
-    val d = (dayStr.toIntOrNull() ?: initialSolarDay).coerceIn(1, 31)
-    val m = (monthStr.toIntOrNull() ?: initialSolarMonth).coerceIn(1, 12)
     val y = (yearStr.toIntOrNull() ?: initialSolarYear).coerceIn(1900, 2100)
+    val m = (monthStr.toIntOrNull() ?: initialSolarMonth).coerceIn(1, 12)
+    val maxDayInMonth = remember(m, y) { LunarCalendarEngine.getDaysInSolarMonth(m, y) }
+    val d = (dayStr.toIntOrNull() ?: initialSolarDay).coerceIn(1, maxDayInMonth)
     val previewLunar = remember(d, m, y) { LunarCalendarEngine.solarToLunar(d, m, y) }
+
+    val categories = listOf(
+        "ancestral" to "Giỗ Chạp",
+        "holiday" to "Ngày Lễ",
+        "anniversary" to "Kỷ Niệm",
+        "work" to "Công Việc",
+        "personal" to "Cá Nhân"
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -754,6 +787,23 @@ fun CreateEventDialog(
                     label = { Text("Ghi chú chi tiết") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                Text(
+                    text = "Phân loại sự kiện:",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    categories.forEach { (key, label) ->
+                        FilterChip(
+                            selected = category == key,
+                            onClick = { category = key },
+                            label = { Text(label) }
+                        )
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = dayStr,

@@ -265,36 +265,13 @@ object LunarCalendarEngine {
     }
 
     /**
-     * Converts Solar date to Vietnamese Lunar date (UTC+7):
-     * 1. Checks cached official online Lunar date if already fetched
-     * 2. Uses official Unicode CLDR / Android ICU Astronomical Calendar (Asia/Ho_Chi_Minh)
-     * 3. Falls back to astronomical Ho Ngoc Duc UTC+7 algorithm
+     * Converts Solar date to Vietnamese Lunar date (strictly UTC+7 Hanoi meridian):
+     * 1. Checks cached official online Lunar date if already fetched and verified for UTC+7
+     * 2. Uses canonical Vietnamese Astronomical Algorithm (Ho Ngoc Duc / QĐ 1829/QĐ-BKHCN UTC+7)
      */
     fun solarToLunar(dd: Int, mm: Int, yy: Int): LunarDate {
         val cacheKey = String.format("%04d-%02d-%02d", yy, mm, dd)
         onlineLunarCache[cacheKey]?.let { return it }
-
-        // Try Android's built-in official ICU Astronomical Calendar in Vietnam TimeZone (Asia/Ho_Chi_Minh)
-        try {
-            val vnIcuTz = android.icu.util.TimeZone.getTimeZone("Asia/Ho_Chi_Minh")
-            val greg = android.icu.util.GregorianCalendar(vnIcuTz).apply {
-                clear()
-                set(yy, mm - 1, dd, 12, 0, 0)
-            }
-            val chineseCal = android.icu.util.ChineseCalendar(vnIcuTz).apply {
-                timeInMillis = greg.timeInMillis
-            }
-            val lDay = chineseCal.get(android.icu.util.Calendar.DAY_OF_MONTH)
-            val lMonth = chineseCal.get(android.icu.util.Calendar.MONTH) + 1
-            val isLeap = chineseCal.get(android.icu.util.Calendar.IS_LEAP_MONTH) == 1
-            if (lDay in 1..30 && lMonth in 1..12) {
-                val lYear = if (mm <= 2 && lMonth >= 11) yy - 1 else yy
-                return LunarDate(lDay, lMonth, lYear, isLeap)
-            }
-        } catch (_: Throwable) {
-            // Fallback to pure astronomical calculation in JVM unit tests
-        }
-
         return astronomicalSolarToLunar(dd, mm, yy)
     }
 
